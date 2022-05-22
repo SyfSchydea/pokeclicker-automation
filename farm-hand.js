@@ -784,7 +784,7 @@
 		performAction() {
 			const targetBerry = this.getTargetBerry();
 			let plantBerry = targetBerry;
-			let plantPlots = null;
+			let plantPlots = undefined;
 			let harvestExclusions = [];
 			let harvestBerries = null;
 			let harvestPlots = null;
