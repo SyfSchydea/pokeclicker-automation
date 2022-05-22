@@ -638,14 +638,27 @@
 	// GROW_MUTATION_PLOTS[parentBerryCount][berryIndex] -> list of plot indices
 	const GROW_MUTATION_PLOTS = GROW_MUTATION_LAYOUTS.map(convertMutationLayout);
 
-	// Specialised layout for Haban berries to avoid letting the
+	// Specialised layout for mutating Haban berries to avoid letting the
 	// Occa berry used in the recipe spread to other berries.
-	const HABAN_LAYOUT = convertMutationLayout([
+	const HABAN_MUTATION_LAYOUT = convertMutationLayout([
 		-1,  3,  0,  2, -1,
 		 2, -1, -1, -1,  3,
 		 0, -1,  1, -1,  0,
 		 3, -1, -1, -1,  2,
 		-1,  2,  0,  3, -1,
+	]);
+
+	/**
+	 * Since Habans slow down surrounding
+	 * plant growth, it's more efficient to
+	 * farm 9 spread out than a full field.
+	 */
+	const HABAN_FARMING_LAYOUT = convertLayout([
+		 0, -1,  0, -1,  0,
+		-1, -1, -1, -1, -1,
+		 0, -1,  0, -1,  0,
+		-1, -1, -1, -1, -1,
+		 0, -1,  0, -1,  0,
 	]);
 
 	/**
@@ -661,10 +674,20 @@
 	function convertMutationLayout(layout) {
 		const parentBerryCount = Math.max(...layout) + 1;
 
-		return Array(parentBerryCount).fill().map((_, berry) =>
-			layout.map((plotBerry, plotIdx) => ({plotBerry, plotIdx}))
+		return Array(parentBerryCount).fill()
+			.map((_, berry) =>
+				convertLayout(layout, berry));
+	}
+
+	/**
+	 * Find a list of locations of a specific plot index in a layout.
+	 */
+	function convertLayout(layout, berry=0) {
+		return (layout
+			.map((plotBerry, plotIdx) =>
+				({plotBerry, plotIdx}))
 			.filter(o => o.plotBerry == berry)
-			.map(o => o.plotIdx))
+			.map(o => o.plotIdx));
 	}
 
 	function toTitleCase(str) {
@@ -760,18 +783,24 @@
 
 		performAction() {
 			const targetBerry = this.getTargetBerry();
-			let plantBerry;
-			let harvestExclusions;
-			let harvestBerries;
-			let harvestPlots;
+			let plantBerry = targetBerry;
+			let plantPlots = null;
+			let harvestExclusions = [];
+			let harvestBerries = null;
+			let harvestPlots = null;
 
 			switch (targetBerry) {
 				// Kasibs may only be farmed by allowing other berries to die.
 				case "Kasib":
 					plantBerry = page.getFastestBerry();
 					harvestExclusions = [plantBerry];
-					harvestBerries = null;
-					harvestPlots = null;
+					break;
+
+				// Habans should be grown spread
+				// out since they slow down
+				// surrounding plants
+				case "Haban":
+					plantPlots = HABAN_FARMING_LAYOUT;
 					break;
 
 				// Kebias are parasitic, and may only be farmed by allowing them to overtake other berries.
@@ -801,16 +830,10 @@
 					break;
 
 				// Other berries may be farmed simply by planting and reharvesting them.
-				default:
-					plantBerry = targetBerry;
-					harvestExclusions = [];
-					harvestBerries = null;
-					harvestPlots = null;
-					break;
 			}
 
 			if (plantBerry) {
-				const plantedPlot = plantOne(plantBerry);
+				const plantedPlot = plantOne(plantBerry, plantPlots);
 				if (plantedPlot != null) {
 					managedPlots[plantedPlot] = true;
 					return DELAY_PLANT;
@@ -1356,7 +1379,7 @@
 
 		getPlantingLayout() {
 			if (this.targetBerry == "Haban") {
-				return HABAN_LAYOUT;
+				return HABAN_MUTATION_LAYOUT;
 			}
 
 			return super.getPlantingLayout();
