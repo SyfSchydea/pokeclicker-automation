@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.17-WACAN
+// @version      1.18-WACAN
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -653,12 +653,12 @@
 	 * plant growth, it's more efficient to
 	 * farm 9 spread out than a full field.
 	 */
-	const HABAN_FARMING_LAYOUT = convertLayout([
-		 0, -1,  0, -1,  0,
-		-1, -1, -1, -1, -1,
-		 0, -1,  0, -1,  0,
-		-1, -1, -1, -1, -1,
-		 0, -1,  0, -1,  0,
+	const HABAN_FARMING_LAYOUT = convertMutationLayout([
+		 0,  1,  0,  1,  0,
+		 1,  1,  1,  1,  1,
+		 0,  1,  0,  1,  0,
+		 1,  1,  1,  1,  1,
+		 0,  1,  0,  1,  0,
 	]);
 
 	/**
@@ -795,69 +795,101 @@
 
 		performAction() {
 			const targetBerry = this.getTargetBerry();
-			let plantBerry = targetBerry;
-			let plantPlots = undefined;
-			let harvestExclusions = [];
-			let harvestBerries = null;
-			let harvestPlots = null;
+			const plantingPhases = [];
+			const harvestingPhases = [];
 
 			switch (targetBerry) {
 				// Kasibs may only be farmed by allowing other berries to die.
-				case "Kasib":
-					plantBerry = page.getFastestBerry();
-					harvestExclusions = [plantBerry];
+				case "Kasib": {
+					const plantBerry = page.getFastestBerry();
+					plantingPhases.push({
+						berry: plantBerry,
+					});
+					harvestingPhases.push({
+						exceptBerries: [plantBerry],
+					});
 					break;
+				}
 
 				// Habans should be grown spread
 				// out since they slow down
 				// surrounding plants
 				case "Haban":
-					plantPlots = HABAN_FARMING_LAYOUT;
+					plantingPhases.push(
+						{
+							berry: targetBerry,
+							plots: HABAN_FARMING_LAYOUT[0],
+						},
+
+						// Wacans are planted in the
+						// remaining spaces to speed
+						// up growth.
+						{
+							berry: "Wacan",
+							plots: HABAN_FARMING_LAYOUT[1],
+						}
+					);
+
+					harvestingPhases.push(
+						{plots: HABAN_FARMING_LAYOUT[0]},
+						{
+							exceptBerries: ["Wacan"],
+							plots: HABAN_FARMING_LAYOUT[1],
+						}
+					);
 					break;
 
 				// Kebias are parasitic, and may only be farmed by allowing them to overtake other berries.
 				case "Kebia":
 					// Attempt to plant seed kebias
-					if (harvestOne({
-								exceptBerries: ["Kebia"],
-								plots: SEED_PLOTS,
-							}) != null) {
-						return DELAY_HARVEST;
-					}
+					harvestingPhases.push({
+						exceptBerries: ["Kebia"],
+						plots: SEED_PLOTS,
+					});
 
-					const plantedPlot = plantOne("Kebia", SEED_PLOTS);
-					if (plantedPlot != null) {
-						managedPlots[plantedPlot] = true;
-						return DELAY_PLANT;
-					}
+					plantingPhases.push(
+						{
+							berry: targetBerry,
+							plots: SEED_PLOTS,
+						},
 
-					// Other slots may be filled with any other berry.
-					plantBerry = page.getParasiteBait();
+						// Other slots may be filled
+						// with any other berry.
+						{
+							berry: page.getParasiteBait(),
+						}
+					);
 
 					// Harvest only the Kebias which have overtaken other plants
 					// Kasibs are also harvested since they cause out "bait" plants
 					// to die faster reducing the overall mutation rate.
-					harvestBerries = ["Kebia", "Kasib"];
-					harvestPlots = nonSeedPlots;
+					harvestingPhases.push({
+						onlyBerries: ["Kebia", "Kasib"],
+						plots: nonSeedPlots,
+					});
 					break;
 
 				// Other berries may be farmed simply by planting and reharvesting them.
+				default:
+					plantingPhases.push({
+						berry: targetBerry,
+					});
+					harvestingPhases.push({});
+					break;
 			}
 
-			if (plantBerry) {
-				const plantedPlot = plantOne(plantBerry, plantPlots);
+			for (const {berry, plots} of plantingPhases) {
+				const plantedPlot = plantOne(berry, plots);
 				if (plantedPlot != null) {
 					managedPlots[plantedPlot] = true;
 					return DELAY_PLANT;
 				}
 			}
 
-			if (harvestOne({
-						exceptBerries: harvestExclusions,
-						onlyBerries: harvestBerries,
-						plots: harvestPlots,
-					}) != null) {
-				return DELAY_HARVEST;
+			for (const options of harvestingPhases) {
+				if (harvestOne(options) != null) {
+					return DELAY_HARVEST;
+				}
 			}
 
 			return DELAY_IDLE;
