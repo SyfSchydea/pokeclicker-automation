@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.17
+// @version      1.17-HABAN
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -653,12 +653,12 @@
 	 * plant growth, it's more efficient to
 	 * farm 9 spread out than a full field.
 	 */
-	const HABAN_FARMING_LAYOUT = convertLayout([
-		 0, -1,  0, -1,  0,
-		-1, -1, -1, -1, -1,
-		 0, -1,  0, -1,  0,
-		-1, -1, -1, -1, -1,
-		 0, -1,  0, -1,  0,
+	const HABAN_FARMING_LAYOUT = convertMutationLayout([
+		 0,  1,  0,  1,  0,
+		 1,  1,  1,  1,  1,
+		 0,  1,  0,  1,  0,
+		 1,  1,  1,  1,  1,
+		 0,  1,  0,  1,  0,
 	]);
 
 	/**
@@ -783,8 +783,7 @@
 
 		performAction() {
 			const targetBerry = this.getTargetBerry();
-			let plantBerry = targetBerry;
-			let plantPlots = undefined;
+			const plantingPhases = [];
 			let harvestExclusions = [];
 			let harvestBerries = null;
 			let harvestPlots = null;
@@ -792,7 +791,9 @@
 			switch (targetBerry) {
 				// Kasibs may only be farmed by allowing other berries to die.
 				case "Kasib":
-					plantBerry = page.getFastestBerry();
+					plantingPhases.push({
+						berry: page.getFastestBerry(),
+					});
 					harvestExclusions = [plantBerry];
 					break;
 
@@ -800,7 +801,20 @@
 				// out since they slow down
 				// surrounding plants
 				case "Haban":
-					plantPlots = HABAN_FARMING_LAYOUT;
+					plantingPhases.push(
+						{
+							berry: targetBerry,
+							plots: HABAN_FARMING_LAYOUT[0],
+						},
+
+						// Wacans are planted in the
+						// remaining spaces to speed
+						// up growth.
+						{
+							berry: "Wacan",
+							plots: HABAN_FARMING_LAYOUT[1],
+						}
+					);
 					break;
 
 				// Kebias are parasitic, and may only be farmed by allowing them to overtake other berries.
@@ -813,14 +827,15 @@
 						return DELAY_HARVEST;
 					}
 
-					const plantedPlot = plantOne("Kebia", SEED_PLOTS);
-					if (plantedPlot != null) {
-						managedPlots[plantedPlot] = true;
-						return DELAY_PLANT;
-					}
+					plantingPhases.push({
+						berry: targetBerry,
+						plots: SEED_PLOTS,
+					});
 
 					// Other slots may be filled with any other berry.
-					plantBerry = page.getParasiteBait();
+					plantingPhases.push({
+						berry: page.getParasiteBait(),
+					});
 
 					// Harvest only the Kebias which have overtaken other plants
 					// Kasibs are also harvested since they cause out "bait" plants
@@ -830,10 +845,15 @@
 					break;
 
 				// Other berries may be farmed simply by planting and reharvesting them.
+				default:
+					plantingPhases.push({
+						berry: targetBerry,
+					});
+					break;
 			}
 
-			if (plantBerry) {
-				const plantedPlot = plantOne(plantBerry, plantPlots);
+			for (const {berry, plots} of plantingPhases) {
+				const plantedPlot = plantOne(berry, plots);
 				if (plantedPlot != null) {
 					managedPlots[plantedPlot] = true;
 					return DELAY_PLANT;
