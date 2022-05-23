@@ -797,17 +797,32 @@
 			const targetBerry = this.getTargetBerry();
 			const plantingPhases = [];
 			const harvestingPhases = [];
+			const useWacans = targetBerry != "Wacan" && page.getBerryAmount("Wacan") > 10;
 
 			switch (targetBerry) {
 				// Kasibs may only be farmed by allowing other berries to die.
 				case "Kasib": {
 					const plantBerry = page.getFastestBerry();
-					plantingPhases.push({
-						berry: plantBerry,
-					});
-					harvestingPhases.push({
-						exceptBerries: [plantBerry],
-					});
+
+					if (useWacans) {
+						plantingPhases.push({
+							berry: plantBerry,
+							plots: WACAN_LAYOUT[0],
+						}, {
+							berry: "Wacan",
+							plots: WACAN_LAYOUT[1],
+						});
+						harvestingPhases.push({
+							exceptBerries: [plantBerry, "Wacan"],
+						});
+					} else {
+						plantingPhases.push({
+							berry: plantBerry,
+						});
+						harvestingPhases.push({
+							exceptBerries: [plantBerry],
+						});
+					}
 					break;
 				}
 
@@ -815,28 +830,26 @@
 				// out since they slow down
 				// surrounding plants
 				case "Haban":
-					plantingPhases.push(
-						{
-							berry: targetBerry,
-							plots: HABAN_FARMING_LAYOUT[0],
-						},
+					plantingPhases.push({
+						berry: targetBerry,
+						plots: HABAN_FARMING_LAYOUT[0],
+					},
 
-						// Wacans are planted in the
-						// remaining spaces to speed
-						// up growth.
-						{
-							berry: "Wacan",
-							plots: HABAN_FARMING_LAYOUT[1],
-						}
-					);
+					// Wacans are planted in the
+					// remaining spaces to speed
+					// up growth.
+					{
+						berry: "Wacan",
+						plots: HABAN_FARMING_LAYOUT[1],
+					});
 
-					harvestingPhases.push(
-						{plots: HABAN_FARMING_LAYOUT[0]},
-						{
-							exceptBerries: ["Wacan"],
-							plots: HABAN_FARMING_LAYOUT[1],
-						}
-					);
+					harvestingPhases.push({
+						plots: HABAN_FARMING_LAYOUT[0],
+					}, {
+						exceptBerries: ["Wacan"],
+						plots: HABAN_FARMING_LAYOUT[1],
+					});
+
 					break;
 
 				// Kebias are parasitic, and may only be farmed by allowing them to overtake other berries.
@@ -847,18 +860,16 @@
 						plots: SEED_PLOTS,
 					});
 
-					plantingPhases.push(
-						{
-							berry: targetBerry,
-							plots: SEED_PLOTS,
-						},
+					plantingPhases.push({
+						berry: targetBerry,
+						plots: SEED_PLOTS,
+					},
 
-						// Other slots may be filled
-						// with any other berry.
-						{
-							berry: page.getParasiteBait(),
-						}
-					);
+					// Other slots may be filled
+					// with any other berry.
+					{
+						berry: page.getParasiteBait(),
+					});
 
 					// Harvest only the Kebias which have overtaken other plants
 					// Kasibs are also harvested since they cause out "bait" plants
@@ -867,14 +878,29 @@
 						onlyBerries: ["Kebia", "Kasib"],
 						plots: nonSeedPlots,
 					});
+
 					break;
 
 				// Other berries may be farmed simply by planting and reharvesting them.
 				default:
-					plantingPhases.push({
-						berry: targetBerry,
-					});
-					harvestingPhases.push({});
+					if (useWacans) {
+						plantingPhases.push({
+							berry: targetBerry,
+							plots: WACAN_LAYOUT[0],
+						}, {
+							berry: "Wacan",
+							plots: WACAN_LAYOUT[1],
+						});
+						harvestingPhases.push({
+							plots: WACAN_LAYOUT[0],
+						});
+					} else {
+						plantingPhases.push({
+							berry: targetBerry,
+						});
+						harvestingPhases.push({});
+					}
+
 					break;
 			}
 
