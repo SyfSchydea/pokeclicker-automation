@@ -784,18 +784,20 @@
 		performAction() {
 			const targetBerry = this.getTargetBerry();
 			const plantingPhases = [];
-			let harvestExclusions = [];
-			let harvestBerries = null;
-			let harvestPlots = null;
+			const harvestingPhases = [];
 
 			switch (targetBerry) {
 				// Kasibs may only be farmed by allowing other berries to die.
-				case "Kasib":
+				case "Kasib": {
+					const plantBerry = page.getFastestBerry();
 					plantingPhases.push({
-						berry: page.getFastestBerry(),
+						berry: plantBerry,
 					});
-					harvestExclusions = [plantBerry];
+					harvestingPhases.push({
+						exceptBerries: [plantBerry],
+					});
 					break;
+				}
 
 				// Habans should be grown spread
 				// out since they slow down
@@ -815,33 +817,44 @@
 							plots: HABAN_FARMING_LAYOUT[1],
 						}
 					);
+
+					harvestingPhases.push(
+						{plots: HABAN_FARMING_LAYOUT[0]},
+						{
+							exceptBerries: ["Wacan"],
+							plots: HABAN_FARMING_LAYOUT[1],
+						}
+					);
 					break;
 
 				// Kebias are parasitic, and may only be farmed by allowing them to overtake other berries.
 				case "Kebia":
 					// Attempt to plant seed kebias
-					if (harvestOne({
-								exceptBerries: ["Kebia"],
-								plots: SEED_PLOTS,
-							}) != null) {
-						return DELAY_HARVEST;
-					}
-
-					plantingPhases.push({
-						berry: targetBerry,
+					harvestingPhases.push({
+						exceptBerries: ["Kebia"],
 						plots: SEED_PLOTS,
 					});
 
-					// Other slots may be filled with any other berry.
-					plantingPhases.push({
-						berry: page.getParasiteBait(),
-					});
+					plantingPhases.push(
+						{
+							berry: targetBerry,
+							plots: SEED_PLOTS,
+						},
+
+						// Other slots may be filled
+						// with any other berry.
+						{
+							berry: page.getParasiteBait(),
+						}
+					);
 
 					// Harvest only the Kebias which have overtaken other plants
 					// Kasibs are also harvested since they cause out "bait" plants
 					// to die faster reducing the overall mutation rate.
-					harvestBerries = ["Kebia", "Kasib"];
-					harvestPlots = nonSeedPlots;
+					harvestingPhases.push({
+						onlyBerries: ["Kebia", "Kasib"],
+						plots: nonSeedPlots,
+					});
 					break;
 
 				// Other berries may be farmed simply by planting and reharvesting them.
@@ -849,6 +862,7 @@
 					plantingPhases.push({
 						berry: targetBerry,
 					});
+					harvestingPhases.push({});
 					break;
 			}
 
@@ -860,12 +874,10 @@
 				}
 			}
 
-			if (harvestOne({
-						exceptBerries: harvestExclusions,
-						onlyBerries: harvestBerries,
-						plots: harvestPlots,
-					}) != null) {
-				return DELAY_HARVEST;
+			for (const options of harvestingPhases) {
+				if (harvestOne(options) != null) {
+					return DELAY_HARVEST;
+				}
 			}
 
 			return DELAY_IDLE;
