@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.17
+// @version      1.17-WACAN
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -659,6 +659,18 @@
 		 0, -1,  0, -1,  0,
 		-1, -1, -1, -1, -1,
 		 0, -1,  0, -1,  0,
+	]);
+
+	/**
+	 * Layout to use when farming any berry accelerated by Wacans.
+	 * The target berry goes in index 0, Wacans go in index 1.
+	 */
+	const WACAN_LAYOUT = convertMutationLayout([
+		0, 0, 0, 0, 0,
+		1, 1, 1, 1, 1,
+		0, 0, 0, 0, 0,
+		1, 1, 1, 1, 1,
+		0, 0, 0, 0, 0,
 	]);
 
 	/**
