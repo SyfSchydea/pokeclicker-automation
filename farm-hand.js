@@ -600,7 +600,7 @@
 			const mutation = farming.mutations.find(m => m instanceof EvolveNearBerryStrictMutation
 
 					// And which require no berrys to surround them...
-					&& Object.keys(yacheMut.berryReqs).length == 0
+					&& Object.keys(m.berryReqs).length == 0
 
 					// And which we haven't already done...
 					&& farming.berryList[m.mutatedBerry]() == 0
@@ -615,7 +615,7 @@
 
 			return {
 				targetBerry: this._lookupBerry(mutation.mutatedBerry),
-				parentBerry: this._lookupBerry(mutatedBerry.originalBerry),
+				parentBerry: this._lookupBerry(mutation.originalBerry),
 			};
 		},
 	};
