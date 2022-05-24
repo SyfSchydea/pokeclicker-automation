@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.19.1-YACHE
+// @version      1.20
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
