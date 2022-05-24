@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.19.1
+// @version      1.19.1-YACHE
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -579,6 +579,45 @@
 				parentBerries: mutation.berryReqs.map(id => this._lookupBerry(id)),
 			};
 		},
+
+		/**
+		 * Find a berry which may be usefully mutated by
+		 * growing it alone with no other plants near it.
+		 *
+		 * @return {{
+		 *   targetBerry: string,
+		 *   parentBerry: string
+		 * }} - Object containing the names of the target and parent
+		 *      berries. Null if there are no suitable mutations.
+		 */
+		getEligibleAloneMutation() {
+			const farming = this._getFarmingModule();
+			if (!farming) {
+				return null;
+			}
+
+			// Filter for mutations of the right type...
+			const mutation = farming.mutations.find(m => m instanceof EvolveNearBerryStrictMutation
+
+					// And which require no berrys to surround them...
+					&& Object.keys(yacheMut.berryReqs).length == 0
+
+					// And which we haven't already done...
+					&& farming.berryList[m.mutatedBerry]() == 0
+					&& !this._isBerryIdOnField(m.mutatedBerry)
+
+					// And which we have enough of the parent berry
+					&& farming.berryList[m.originalBerry]() > 9);
+
+			if (!mutation) {
+				return null;
+			}
+
+			return {
+				targetBerry: this._lookupBerry(mutation.mutatedBerry),
+				parentBerry: this._lookupBerry(mutatedBerry.originalBerry),
+			};
+		},
 	};
 
 	//////////////////////////
@@ -649,11 +688,9 @@
 	]);
 
 	/**
-	 * Since Habans slow down surrounding
-	 * plant growth, it's more efficient to
-	 * farm 9 spread out than a full field.
+	 * Layout for growing 9 plants completely isolated from each other.
 	 */
-	const HABAN_FARMING_LAYOUT = convertMutationLayout([
+	const ALONE_LAYOUT = convertMutationLayout([
 		 0,  1,  0,  1,  0,
 		 1,  1,  1,  1,  1,
 		 0,  1,  0,  1,  0,
@@ -832,7 +869,7 @@
 				case "Haban":
 					plantingPhases.push({
 						berry: targetBerry,
-						plots: HABAN_FARMING_LAYOUT[0],
+						plots: ALONE_LAYOUT[0],
 					},
 
 					// Wacans are planted in the
@@ -840,14 +877,14 @@
 					// up growth.
 					{
 						berry: "Wacan",
-						plots: HABAN_FARMING_LAYOUT[1],
+						plots: ALONE_LAYOUT[1],
 					});
 
 					harvestingPhases.push({
-						plots: HABAN_FARMING_LAYOUT[0],
+						plots: ALONE_LAYOUT[0],
 					}, {
 						exceptBerries: ["Wacan"],
-						plots: HABAN_FARMING_LAYOUT[1],
+						plots: ALONE_LAYOUT[1],
 					});
 
 					break;
@@ -1048,6 +1085,28 @@
 			}
 
 			if (harvestOne({exceptBerries: [this.parentBerry]}) != null) {
+				return DELAY_HARVEST;
+			}
+
+			return DELAY_IDLE;
+		}
+	}
+
+	/**
+	 * Mutation task for mutations which occur when a plant is grown alone.
+	 */
+	class AloneMutationTask extends FullFieldMutationTask {
+		performAction() {
+			if (plantOne(this.parentBerry, ALONE_LAYOUT[0]) != null) {
+				return DELAY_PLANT;
+			}
+
+			if (harvestOne({
+						exceptBerries: [this.parentBerry],
+						plots: ALONE_LAYOUT[0],
+					}) != null || harvestOne({
+						plots: ALONE_LAYOUT[1],
+					}) != null) {
 				return DELAY_HARVEST;
 			}
 
@@ -1530,6 +1589,16 @@
 						"into", growNearBerry.targetBerry);
 				currentTask = new GrowNearBerryMutateTask(
 						growNearBerry.parentBerries, growNearBerry.targetBerry);
+				priority = currentTask.priority;
+				break mutationTasks;
+			}
+
+			const aloneMutation = page.getEligibleAloneMutation();
+			if (aloneMutation) {
+				console.log("Farming to grow", aloneMutation.parentBerry,
+						"into", aloneMutation.targetBerry);
+				currentTask = new AloneMutationTask(
+						aloneMutation.parentBerry, aloneMutation.targetBerry);
 				priority = currentTask.priority;
 				break mutationTasks;
 			}
