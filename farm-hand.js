@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.19
+// @version      1.19.1
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -893,6 +893,9 @@
 						});
 						harvestingPhases.push({
 							plots: WACAN_LAYOUT[0],
+						}, {
+							plots: WACAN_LAYOUT[1],
+							exceptBerries: ["Wacan"],
 						});
 					} else {
 						plantingPhases.push({
