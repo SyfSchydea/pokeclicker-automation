@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Digger
 // @namespace    http://tampermonkey.net/
-// @version      1.2.1
+// @version      1.3
 // @description  Automates digging underground in Pokéclicker.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -254,6 +254,16 @@
 				.some(q => (q instanceof MineItemsQuest || q instanceof MineLayersQuest)
 					&& !q.isCompleted());
 		},
+
+		/**
+		 * Find the player's diamond net worth.
+		 * This is the number of diamonds the player would have if they sold every item worth any diamonds.
+		 *
+		 * @return {number} - Diamond net worth.
+		 */
+		getDiamondNetWorth() {
+			return Underground.getDiamondNetWorth();
+		},
 	};
 
 	//////////////////////////
@@ -273,6 +283,8 @@
 	const DELAY_NEW_LAYER =       5 * 1000;
 	const DELAY_INIT      =           1000;
 	const DELAY_NO_TASK   =      60 * 1000;
+
+	const TARGET_DIAMOND_VALUE = 1000;
 
 	/**
 	 * Compare two {x, y} position objects.
@@ -387,6 +399,15 @@
 		}
 	}
 
+	/**
+	 * Mines up to a specified diamond value while idle.
+	 */
+	class NetWorthTask extends LayerTask {
+		hasExpired() {
+			return page.getDiamondNetWorth() >= TARGET_DIAMOND_VALUE;
+		}
+	}
+
 	let currentTask = null;
 	let tickTimeoutId = null;
 
@@ -409,6 +430,9 @@
 			if (page.hasUndergroundQuest()) {
 				console.log("Mining for a quest");
 				currentTask = new QuestTask();
+			} else if (page.getDiamondNetWorth() < TARGET_DIAMOND_VALUE) {
+				console.log("Mining for diamonds");
+				currentTask = new NetWorthTask();
 			} else {
 				return scheduleTick(DELAY_NO_TASK);
 			}

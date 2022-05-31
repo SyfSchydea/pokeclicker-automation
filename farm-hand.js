@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.20
+// @version      1.21
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -618,6 +618,50 @@
 				parentBerry: this._lookupBerry(mutation.originalBerry),
 			};
 		},
+
+		/**
+		 * Find a berry which may be usefully mutated by growing 8 of another berry around an empty plot.
+		 *
+		 * @return {{
+		 *   targetBerry: string,
+		 *   parentBerry: string
+		 * }} - Object containing the names of the target and parent
+		 *      berries. Null if there are no suitable mutations.
+		 */
+		getEligibleSurroundMutation() {
+			const farming = this._getFarmingModule();
+			if (!farming) {
+				return null;
+			}
+
+			const mutation = farming.mutations.find(m => {
+					// Filter for mutations of the right type...
+					if (!(m instanceof GrowNearBerryStrictMutation)) {
+						return false;
+					}
+
+					// And which require 8 of one berry type...
+					const parents = Object.entries(m.berryReqs);
+					return parents.length == 1
+						&& parents[0][1] == 8
+
+						// And which we haven't already done...
+						&& farming.berryList[m.mutatedBerry]() == 0
+						&& !this._isBerryIdOnField(m.mutatedBerry)
+
+						// And which we have enough of the parent berry
+						&& farming.berryList[+parents[0][0]]() > 21;
+				});
+
+			if (!mutation) {
+				return null;
+			}
+
+			return {
+				targetBerry: this._lookupBerry(mutation.mutatedBerry),
+				parentBerry: this._lookupBerry(Object.keys(mutation.berryReqs)[0]),
+			};
+		},
 	};
 
 	//////////////////////////
@@ -656,9 +700,15 @@
 	// List of all plot ids in the farm.
 	const allPlots = Array(PAGE_PLOT_COUNT).fill(null).map((x, i) => i);
 
-	// Strategy used when farming parasitic Kebia berries
-	const SEED_PLOTS = [6, 8, 16, 18];
-	const nonSeedPlots = allPlots.filter(p => !SEED_PLOTS.includes(p));
+	// Layout in which index 0 plants are fully surrounded by index 1 plants
+	// Used for farming parasitic Kebia berries, as well as certain mutations
+	const SURROUND_LAYOUT = convertMutationLayout([
+		1, 1, 1, 1, 1,
+		1, 0, 1, 0, 1,
+		1, 1, 1, 1, 1,
+		1, 0, 1, 0, 1,
+		1, 1, 1, 1, 1,
+	]);
 
 	// Layouts used when farming for grow mutations.
 	// Indexed by the number of parent berries involved in the mutation.
@@ -759,6 +809,7 @@
 	 *  - exceptBerries {string[]} - List of names of berries to avoid harvesting.
 	 *  - onlyBerries   {string[]} - List of names of berries to harvest.
 	 *  - plots         {number[]} - List of plot ids to harvest from. If omitted, all plots may be harvested.
+	 *  - force         {boolean}  - True to use a shovel to remove the plant if it's not fully grown.
 	 *
 	 * @param options {Object} - List of options to configure which plots and berries may be harvested.
 	 * @return        {number} - Plot id which was harvested, or null if unsuccessful.
@@ -772,7 +823,8 @@
 			const berry = page.getBerryInPlot(i);
 			if (!exceptBerries.includes(berry)
 					&& (!options.onlyBerries || options.onlyBerries.includes(berry))
-					&& harvestPlot(i)) {
+					&& (harvestPlot(i)
+						|| (options.force && page.forceRemovePlot(i)))) {
 				return i;
 			}
 		}
@@ -894,12 +946,12 @@
 					// Attempt to plant seed kebias
 					harvestingPhases.push({
 						exceptBerries: ["Kebia"],
-						plots: SEED_PLOTS,
+						plots: SURROUND_LAYOUT[0],
 					});
 
 					plantingPhases.push({
 						berry: targetBerry,
-						plots: SEED_PLOTS,
+						plots: SURROUND_LAYOUT[0],
 					},
 
 					// Other slots may be filled
@@ -913,7 +965,7 @@
 					// to die faster reducing the overall mutation rate.
 					harvestingPhases.push({
 						onlyBerries: ["Kebia", "Kasib"],
-						plots: nonSeedPlots,
+						plots: SURROUND_LAYOUT[1],
 					});
 
 					break;
@@ -1108,6 +1160,32 @@
 						plots: ALONE_LAYOUT[1],
 					}) != null) {
 				return DELAY_HARVEST;
+			}
+
+			return DELAY_IDLE;
+		}
+	}
+
+	/**
+	 * Mutation task for mutations which occur when an empty plot is surrounded by 8 of a berry.
+	 */
+	class SurroundMutationTask extends FullFieldMutationTask {
+		performAction() {
+			if (harvestOne({
+						plots: SURROUND_LAYOUT[0],
+					}) != null || harvestOne({
+						plots: SURROUND_LAYOUT[1],
+						exceptBerries: [this.parentBerry],
+					}) != null || harvestOne({
+						plots: SURROUND_LAYOUT[0],
+						onlyBerries: [this.parentBerry],
+						force: true,
+					}) != null) {
+				return DELAY_HARVEST;
+			}
+
+			if (plantOne(this.parentBerry, SURROUND_LAYOUT[1]) != null) {
+				return DELAY_PLANT;
 			}
 
 			return DELAY_IDLE;
@@ -1599,6 +1677,16 @@
 						"into", aloneMutation.targetBerry);
 				currentTask = new AloneMutationTask(
 						aloneMutation.parentBerry, aloneMutation.targetBerry);
+				priority = currentTask.priority;
+				break mutationTasks;
+			}
+
+			const surroundMutation = page.getEligibleSurroundMutation();
+			if (surroundMutation) {
+				console.log("Farming to grow", surroundMutation.parentBerry,
+						"into", surroundMutation.targetBerry);
+				currentTask = new SurroundMutationTask(
+						surroundMutation.parentBerry, surroundMutation.targetBerry);
 				priority = currentTask.priority;
 				break mutationTasks;
 			}
