@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PokéClicker - Auto-breeder
 // @namespace    http://tampermonkey.net/
-// @version      1.17.1
+// @version      1.17.2
 // @description  Handles breeding eggs automatically
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -198,13 +198,33 @@
 		 * @return {Object|null} - Fossil object if the player owns one, or null otherwise.
 		 */
 		_getOwnedFossil() {
-			return player.mineInventory()
-					.find(item => item.valueType == UndergroundItemValueType.Fossil
-							&& item.amount() > 0
-							&& this._unlockedFossil(item)
-							&& !App.game.party.alreadyCaughtPokemonByName(
-								GameConstants.FossilToPokemon[item.name]))
-					|| null;
+			itemLoop: for (const item of player.mineInventory()) {
+				if (item => item.valueType != UndergroundItemValueType.Fossil)
+					continue;
+
+				if (item.amount() <= 0)
+					continue;
+
+				if (!this._unlockedFossil(item))
+					continue;
+
+				// Check that we haven't already caught the
+				// pokemon or have it already in an egg
+				const targetMon = GameConstants.FossilToPokemon[item.name];
+				if (App.game.party.alreadyCaughtPokemonByName(targetMon))
+					continue;
+
+				const targetId = PokemonHelper.getPokemonByName("Aerodactyl");
+				for (const eggSlot of App.game.breeding.eggList) {
+					if (eggSlot().pokemon == targetId) {
+						continue itemLoop;
+					}
+				}
+
+				return item;
+			}
+			
+			return null;
 		},
 
 		/**
