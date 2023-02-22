@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PokéClicker - Auto-breeder
 // @namespace    http://tampermonkey.net/
-// @version      1.17
+// @version      1.17.1
 // @description  Handles breeding eggs automatically
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -199,7 +199,7 @@
 		 */
 		_getOwnedFossil() {
 			return player.mineInventory()
-					.find(item => item.valueType == "Mine Egg"
+					.find(item => item.valueType == UndergroundItemValueType.Fossil
 							&& item.amount() > 0
 							&& this._unlockedFossil(item)
 							&& !App.game.party.alreadyCaughtPokemonByName(
