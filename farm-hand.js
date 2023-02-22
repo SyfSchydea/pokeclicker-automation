@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.22
+// @version      1.23
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -581,6 +581,49 @@
 		},
 
 		/**
+		 * Find a grow-near-flavour mutation which may be fulfilled
+		 * using three of a single parent berry type.
+		 */
+		getEligibleGrowNearFlavourMutation() {
+			const farming = this._getFarmingModule();
+			if (!farming) {
+				return null;
+			}
+
+			for (const mutation of farming.mutations) {
+				// Filter for the correct type
+				if (!(mutation instanceof GrowNearFlavorMutation)) {
+					continue;
+				}
+
+				// Check we haven't already got the target berry
+				if (farming.berryList[mutation.mutatedBerry]() > 0
+						|| this._isBerryIdOnField(mutation.mutatedBerry)) {
+					continue;
+				}
+
+				// originalBerry's flavours * 8 fall within the range specified by the mutation
+				berryLoop: for (const parentBerry of farming.berryData) {
+					for (let i = 0; i < mutation.flavorReqs.length; ++i) {
+						const [min, max] = mutation.flavorReqs[i];
+						const berryFlavour = parentBerry.flavors[i].value * 8;
+
+						if (berryFlavour < min || berryFlavour > max) {
+							continue berryLoop;
+						}
+					}
+
+					return {
+						targetBerry: this._lookupBerry(mutation.mutatedBerry),
+						parentBerry: this._lookupBerry(parentBerry.type),
+					};
+				}
+			}
+
+			return null;
+		},
+
+		/**
 		 * Find a berry which may be usefully mutated by
 		 * growing it alone with no other plants near it.
 		 *
@@ -700,14 +743,27 @@
 	// List of all plot ids in the farm.
 	const allPlots = Array(PAGE_PLOT_COUNT).fill(null).map((x, i) => i);
 
+	const SINGLE_PARENT_GROW_MUTATION_LAYOUTS = [];
+
 	// Layout in which index 0 plants are fully surrounded by index 1 plants
 	// Used for farming parasitic Kebia berries, as well as certain mutations
-	const SURROUND_LAYOUT = convertMutationLayout([
+	const SURROUND_LAYOUT = SINGLE_PARENT_GROW_MUTATION_LAYOUTS[8] = convertMutationLayout([
 		1, 1, 1, 1, 1,
 		1, 0, 1, 0, 1,
 		1, 1, 1, 1, 1,
 		1, 0, 1, 0, 1,
 		1, 1, 1, 1, 1,
+	]);
+
+	/**
+	 * Layout for grow mutations requiring 3 of a single parent berry type.
+	 */
+	SINGLE_PARENT_GROW_MUTATION_LAYOUTS[3] = convertMutationLayout([
+		0, 1, 0, 0, 1,
+		1, 1, 0, 1, 1,
+		0, 0, 0, 0, 0,
+		0, 1, 0, 0, 1,
+		1, 1, 0, 1, 1,
 	]);
 
 	// Layouts used when farming for grow mutations.
@@ -1174,28 +1230,48 @@
 	}
 
 	/**
-	 * Mutation task for mutations which occur when an empty plot is surrounded by 8 of a berry.
+	 * Mutation task for mutations which occur when an empty plot is surrounded by N of a single type of berry.
 	 */
-	class SurroundMutationTask extends FullFieldMutationTask {
+	class SingleParentGrowMutationTask extends FullFieldMutationTask {
+		constructor(parentBerry, targetBerry, parentCount) {
+			super(parentBerry, targetBerry);
+			this.parentCount = parentCount;
+
+			this.layout = SINGLE_PARENT_GROW_MUTATION_LAYOUTS[parentCount];
+			if (!this.layout) {
+				throw new Error(`No layout for ${parentCount} berry grow mutations`);
+			}
+		}
+
 		performAction() {
 			if (harvestOne({
-						plots: SURROUND_LAYOUT[0],
+						plots: this.layout[0],
 					}) != null || harvestOne({
-						plots: SURROUND_LAYOUT[1],
+						plots: this.layout[1],
 						exceptBerries: [this.parentBerry],
 					}) != null || harvestOne({
-						plots: SURROUND_LAYOUT[0],
+						plots: this.layout[0],
 						onlyBerries: [this.parentBerry],
 						force: true,
 					}) != null) {
 				return DELAY_HARVEST;
 			}
 
-			if (plantOne(this.parentBerry, SURROUND_LAYOUT[1]) != null) {
+			if (plantOne(this.parentBerry, this.layout[1]) != null) {
 				return DELAY_PLANT;
 			}
 
 			return DELAY_IDLE;
+		}
+	}
+
+	/**
+	 * Mutation task for mutations which require 3 of a given parent berry around an empty spot.
+	 */
+	class ThreeBerryGrowMutationTask extends FullFieldMutationTask {
+		performAction() {
+			// Harvest anything that isn't parentBerry
+			// 
 		}
 	}
 
@@ -1692,8 +1768,18 @@
 			if (surroundMutation) {
 				console.log("Farming to grow", surroundMutation.parentBerry,
 						"into", surroundMutation.targetBerry);
-				currentTask = new SurroundMutationTask(
-						surroundMutation.parentBerry, surroundMutation.targetBerry);
+				currentTask = new SingleParentGrowMutationTask(
+						surroundMutation.parentBerry, surroundMutation.targetBerry, 8);
+				priority = currentTask.priority;
+				break mutationTasks;
+			}
+
+			const growNearFlavourMutation = page.getEligibleGrowNearFlavourMutation();
+			if (growNearFlavourMutation) {
+				console.log("Farming to grow", growNearFlavourMutation.parentBerry,
+						"into", growNearFlavourMutation.targetBerry);
+				currentTask = new SingleParentGrowMutationTask(
+						growNearFlavourMutation.parentBerry, growNearFlavourMutation.targetBerry, 3);
 				priority = currentTask.priority;
 				break mutationTasks;
 			}
