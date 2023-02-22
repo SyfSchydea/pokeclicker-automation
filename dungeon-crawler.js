@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Dungeon Crawler
 // @namespace    http://tampermonkey.net/
-// @version      1.4
+// @version      1.5
 // @description  Completes dungeons automatically.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -522,11 +522,8 @@
 	class DungeonClearTask {
 		constructor(dungeonName, clears) {
 			this.dungeonName = dungeonName;
-
 			this.playerClears = page.getDungeonClears(dungeonName);
-
-			const clearLimit = Math.max(1, Math.ceil(this.playerClears / 2));
-			this.remainingClears = Math.min(clearLimit, clears);
+			this.remainingClears = clears;
 		}
 
 		logClear() {
