@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.21
+// @version      1.22
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -1021,6 +1021,13 @@
 
 		constructor(targetBerry) {
 			super(null, targetBerry);
+		}
+
+		getTargetBerry() {
+			if (this.targetBerry && page.getBerryAmount(this.targetBerry) > 0)
+				return this.targetBerry;
+			else
+				return page.getBestFarmingBerry(true);
 		}
 
 		hasExpired(unusedNow) {
