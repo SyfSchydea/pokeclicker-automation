@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.23
+// @version      1.23.1
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -1587,8 +1587,6 @@
 						if (page.forceRemovePlot(p)) {
 							managedPlots[p] = false;
 							return DELAY_HARVEST;
-						} else {
-							console.log("Failed to clear plot", p);
 						}
 					}
 				}
