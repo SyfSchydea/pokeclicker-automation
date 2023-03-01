@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.23.1
+// @version      1.24.1
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -338,9 +338,11 @@
 		 *
 		 * @param excludeSpecial {boolean} - Set to true to avoid returning berries which require
 		 *                                   non-standard farming methods. Currently Kasib and Kebia.
+		 * @param maxMaturation  {number}  - Maximum number of seconds to maturation to allow in a returned berry.
+		 *                                   Negative to ignore maturation time.
 		 * @return           {string|null} - Name of a berry to farm, or null if there are no suitable berries.
 		 */
-		getBestFarmingBerry(excludeSpecial=false) {
+		getBestFarmingBerry(excludeSpecial=false, maxMaturation=-1) {
 			const SPECIAL_BERRIES = [BerryType.Kasib, BerryType.Kebia];
 
 			const farming = App.game.farming;
@@ -348,8 +350,9 @@
 			let validBerries = farming.berryData
 				// Only take berries which yield more from harvesting (eg. Lum does not)
 				// plus Kasib and Kebia berries as exceptions
-				.filter(b => b.harvestAmount > 1
-					|| (!excludeSpecial && SPECIAL_BERRIES.includes(b.type)))
+				.filter(b => (b.harvestAmount > 1
+						|| (!excludeSpecial && SPECIAL_BERRIES.includes(b.type)))
+					&& (maxMaturation < 0 || b.growthTime[GROWTH_STAGE_MATURE] <= maxMaturation))
 
 				// Filter for only berries the player owns
 				.map(b => ({data: b, amt: farming.berryList[b.type]()}))
@@ -740,6 +743,9 @@
 	const PRIORITY_CLEAN_UP    =  1;
 	const PRIORITY_NOTHING     =  0;
 
+	// Max maturation time in seconds to allow for a berry chosen to farm during a Farm Point quest
+	const POINT_QUEST_MAX_MATURATION = 15 * 60;
+
 	// List of all plot ids in the farm.
 	const allPlots = Array(PAGE_PLOT_COUNT).fill(null).map((x, i) => i);
 
@@ -1080,10 +1086,16 @@
 		}
 
 		getTargetBerry() {
-			if (this.targetBerry && page.getBerryAmount(this.targetBerry) > 0)
+			if (["Kebia", "Kasib"].includes(this.targetBerry)) {
 				return this.targetBerry;
-			else
+			}
+			if (this.targetBerry
+					&& (page.getBerryAmount(this.targetBerry) > 0
+						|| ["Kebia", "Kasib"].includes(this.targetBerry))) {
+				return this.targetBerry;
+			} else {
 				return page.getBestFarmingBerry(true);
+			}
 		}
 
 		hasExpired(unusedNow) {
@@ -1121,7 +1133,7 @@
 		}
 
 		getTargetBerry() {
-			return page.getBestFarmingBerry(true);
+			return page.getBestFarmingBerry(true, POINT_QUEST_MAX_MATURATION);
 		}
 
 		hasExpired(unusedNow) {
