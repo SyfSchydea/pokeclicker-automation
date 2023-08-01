@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PokéClicker - Auto-breeder
 // @namespace    http://tampermonkey.net/
-// @version      1.17.3
+// @version      1.17.4
 // @description  Handles breeding eggs automatically
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -53,7 +53,7 @@
 			}
 
 			const egg = breeding.eggList[eggIdx]();
-			if (egg.pokemon == "MissingNo.") {
+			if (!egg.canHatch() || egg.pokemon == "MissingNo.") {
 				return false;
 			}
 
