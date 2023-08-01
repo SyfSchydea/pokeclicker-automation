@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PokéClicker - Auto-breeder
 // @namespace    http://tampermonkey.net/
-// @version      1.17.4
+// @version      1.17.5
 // @description  Handles breeding eggs automatically
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -422,7 +422,7 @@
 	// Delays following certain actions
 	const DELAY_HATCH   =           800;
 	const DELAY_BREED   =           800;
-	const DELAY_IDLE    = 5 * 60 * 1000;
+	const DELAY_IDLE    =     30 * 1000;
 	const DELAY_INITIAL =     30 * 1000;
 
 	// How often to report hatched eggs. Report every nth hatched egg.
