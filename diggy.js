@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Digger
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.4
 // @description  Automates digging underground in Pokéclicker.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -177,6 +177,32 @@
 		},
 
 		/**
+		 * Check if the player can currently afford a survey.
+		 *
+		 * @return - Truthy if the player has enough energy for a survey, or falsey if not.
+		 */
+		canAffordSurvey() {
+			const underground = App.game.underground;
+			return underground.energy >= underground.getSurvey_Cost();
+		},
+
+		/**
+		 * Test if the player has used a survey on the current floor.
+		 *
+		 * @return - Truthy if the player has used a survey, falsey otherwise.
+		 */
+		hasUsedSurvey() {
+			return !!Mine.surveyResult();
+		},
+
+		/**
+		 * Attempt to use a survey.
+		 */
+		useSurvey() {
+			Mine.survey();
+		},
+
+		/**
 		 * Fetch the size of the current mine grid.
 		 *
 		 * @return {{x: number, y: number}} - Grid width and height.
@@ -279,6 +305,7 @@
 
 	const DELAY_BOMB      =           1000;
 	const DELAY_CHISEL    =            200;
+	const DELAY_SURVEY    =           1000;
 	const DELAY_IDLE      = 10 * 60 * 1000;
 	const DELAY_NEW_LAYER =       5 * 1000;
 	const DELAY_INIT      =           1000;
@@ -373,6 +400,15 @@
 			}
 
 			if (!page.hasLocatedAllRewards()) {
+				if (!page.hasUsedSurvey()) {
+					if (!page.canAffordSurvey()) {
+						return DELAY_IDLE;
+					}
+
+					page.useSurvey();
+					return DELAY_SURVEY;
+				}
+
 				if (page.canAffordBomb()) {
 					page.useBomb();
 					return DELAY_BOMB;
