@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Digger
 // @namespace    http://tampermonkey.net/
-// @version      1.5.1
+// @version      1.5.2
 // @description  Automates digging underground in Pokéclicker.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -323,6 +323,18 @@
 		getDiamondNetWorth() {
 			return Underground.getDiamondNetWorth();
 		},
+
+		/**
+		 * Check if the player is able to access the underground UI.
+		 * Eg. The player is not able to access it, even by hotkey, when in the safari zone.
+		 * The bot shouldn't interact with the underground minigame while this is the case.
+		 *
+		 * @return - Truthy if the player cannot access the UI.
+		 *           Falsey if we have no reason to assume the player cannot access the UI.
+		 */
+		canAccessUi() {
+			return !Safari.inProgress();
+		},
 	};
 
 	//////////////////////////
@@ -516,6 +528,10 @@
 
 		if (!page.gameLoaded()) {
 			return scheduleTick(DELAY_INIT);
+		}
+
+		if (!page.canAccessUi()) {
+			return scheduleTick(DELAY_IDLE);
 		}
 
 		if (!currentTask) {
