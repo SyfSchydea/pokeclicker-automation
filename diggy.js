@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Digger
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.5.1
 // @description  Automates digging underground in Pokéclicker.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -216,6 +216,7 @@
 		 */
 		useSurvey() {
 			Mine.survey();
+			$("#mine-survey-result").trigger("mouseout");
 		},
 
 		/**
