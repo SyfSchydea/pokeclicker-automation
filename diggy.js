@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Digger
 // @namespace    http://tampermonkey.net/
-// @version      1.4
+// @version      1.5
 // @description  Automates digging underground in Pokéclicker.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -196,10 +196,42 @@
 		},
 
 		/**
+		 * Return the quantities/values of the items on the current floor, as returned by a survey.
+		 *
+		 * @return {Object} - Object containing 'fossils', 'fossilpieces', 'plates', 'evoItems',
+		 *                    'totalValue', 'shards', and 'megaStones', similar to how
+		 *                    Mine.rewardSummary returns it.
+		 *                    Null if the player has not yet used a survey on this floor.
+		 */
+		getSurveyResult() {
+			if (!this.hasUsedSurvey()) {
+				return null;
+			}
+
+			return Mine.rewardSummary();
+		},
+
+		/**
 		 * Attempt to use a survey.
 		 */
 		useSurvey() {
 			Mine.survey();
+		},
+
+		/**
+		 * Test if the player can afford to skip the current floor.
+		 *
+		 * @return - Truthy if the player can afford to use a skip. False if not.
+		 */
+		canAffordSkip() {
+			return Mine.skipsRemaining() > 0;
+		},
+
+		/**
+		 * Attempt to skip the current layer.
+		 */
+		skipLayer() {
+			Mine.skipLayer(/*shouldConfirm*/ false);
 		},
 
 		/**
@@ -360,6 +392,23 @@
 	}
 
 	/**
+	 * Check if the current floor should be skipped.
+	 *
+	 * @return {boolean} - True if the floor should be skipped, false if not, or if we don't have enough information.
+	 */
+	function shouldSkipFloor() {
+		const survey = page.getSurveyResult();
+		if (!survey) {
+			return false;
+		}
+
+		// If the floor contains only gem plates, skip it.
+		return (survey.fossils <= 0 && survey.fossilpieces <= 0
+				&& survey.evoItems <=0 && survey.totalValue <= 0
+				&& survey.shards <= 0 && survey.megaStones <= 0);
+	}
+
+	/**
 	 * Task for locating, but not necessarily fully excavating all rewards on the current layer.
 	 */
 	class LocateTask {
@@ -399,27 +448,33 @@
 				return DELAY_NEW_LAYER;
 			}
 
-			if (!page.hasLocatedAllRewards()) {
-				if (!page.hasUsedSurvey()) {
-					if (!page.canAffordSurvey()) {
-						return DELAY_IDLE;
-					}
-
-					page.useSurvey();
-					return DELAY_SURVEY;
-				}
-
-				if (page.canAffordBomb()) {
-					page.useBomb();
-					return DELAY_BOMB;
+			if (page.hasLocatedAllRewards()) {
+				if (page.canAffordChisel()) {
+					page.useChisel(findChiselSpot());
+					return DELAY_CHISEL;
 				}
 
 				return DELAY_IDLE;
+
 			}
 
-			if (page.canAffordChisel()) {
-				page.useChisel(findChiselSpot());
-				return DELAY_CHISEL;
+			if(shouldSkipFloor() && page.canAffordSkip()) {
+				page.skipLayer();
+				return DELAY_NEW_LAYER
+			}
+
+			if (!page.hasUsedSurvey()) {
+				if (!page.canAffordSurvey()) {
+					return DELAY_IDLE;
+				}
+
+				page.useSurvey();
+				return DELAY_SURVEY;
+			}
+
+			if (page.canAffordBomb()) {
+				page.useBomb();
+				return DELAY_BOMB;
 			}
 
 			return DELAY_IDLE;
