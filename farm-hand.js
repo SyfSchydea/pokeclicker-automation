@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.24.1
+// @version      1.24.2
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -707,6 +707,18 @@
 				targetBerry: this._lookupBerry(mutation.mutatedBerry),
 				parentBerry: this._lookupBerry(Object.keys(mutation.berryReqs)[0]),
 			};
+		},
+
+		/**
+		 * Check if the player is able to access the farm UI.
+		 * Eg. The player is not able to access it, even by hotkey, when in the safari zone.
+		 * The bot shouldn't interact with the farming minigame while this is the case.
+		 *
+		 * @return - Truthy if the player cannot access the UI.
+		 *           Falsey if we have no reason to assume the player cannot access the UI.
+		 */
+		canAccessUi() {
+			return !Safari.inProgress();
 		},
 	};
 
@@ -1797,6 +1809,10 @@
 	}
 
 	function tick() {
+		if (!page.canAccessUi()) {
+			return scheduleTick(DELAY_NO_TASK);
+		}
+
 		if (currentTask && currentTask.hasExpired()) {
 			console.log("Farming task has expired");
 			currentTask = currentTask.expire? currentTask.expire() : null;
