@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Safari Ranger
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @description  This script will automate the safari zone.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -278,9 +278,14 @@
 		startTask(new FindShinyTask());
 	}
 
+	function cmdStop() {
+		currentTask = null;
+	}
+
 	(function main() {
 		window[WINDOW_KEY] = {
 			findShiny: cmdFindShiny,
+			stop: cmdStop,
 		};
 	})();
 })();
