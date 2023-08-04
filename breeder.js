@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PokéClicker - Auto-breeder
 // @namespace    http://tampermonkey.net/
-// @version      1.17.5
+// @version      1.17.6
 // @description  Handles breeding eggs automatically
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -406,6 +406,18 @@
 		getHighestRegion() {
 			return player.highestRegion();
 		},
+
+		/**
+		 * Check if the player is able to access the hatchery UI.
+		 * Eg. The player is not able to access it when in the safari zone.
+		 * The bot shouldn't interact with the hatchery while this is the case.
+		 *
+		 * @return - Truthy if the player cannot access the UI.
+		 *           Falsey if we have no reason to assume the player cannot access the UI.
+		 */
+		canAccessUi() {
+			return !Safari.inProgress();
+		},
 	};
 
 	//////////////////////////
@@ -550,6 +562,11 @@
 	 * Intended to be called regularly.
 	 */
 	function tick() {
+		if (!page.canAccessUi()) {
+			setTimeout(tick, DELAY_IDLE);
+			return;
+		}
+
 		if (currentTask && currentTask.hasExpired()) {
 			console.log("Breeding task expired");
 			currentTask = null;
