@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Safari Ranger
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @description  This script will automate the safari zone.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -133,7 +133,7 @@
 		 */
 		isShinyPokemonOnGrid() {
 			const onGridPokemon = Safari.pokemonGrid();
-			for (let i = 0; i < onGridPokemon; ++i) {
+			for (let i = 0; i < onGridPokemon.length; ++i) {
 				const pkmn = onGridPokemon[i];
 
 				if (pkmn.shiny) {
@@ -168,7 +168,32 @@
 		 * Attempt to run from the current safari battle.
 		 */
 		runFromBattle() {
-			this.isOnSafari() && !SafariBattle.busy() && SafariBattle.run();
+			this.isOnSafari() && this.inBattle() && !SafariBattle.busy() && SafariBattle.run();
+		},
+
+		/**
+		 * Attempt to throw a rock at the current enemy pokemon.
+		 */
+		throwRock() {
+			this.isOnSafari() && this.inBattle() && !SafariBattle.busy() && SafariBattle.throwRock();
+		},
+
+		/**
+		 * Get the player's current level.
+		 *
+		 * @return {number} - Player's current safari level.
+		 */
+		getLevel() {
+			return Safari.safariLevel();
+		},
+
+		/**
+		 * Find the max level which the player can achieve.
+		 *
+		 * @return {number} - Safari level cap.
+		 */
+		getLevelCap() {
+			return Safari.maxSafariLevel;
 		},
 	};
 
@@ -240,6 +265,38 @@
 		}
 	}
 
+	// Throw rocks until a given level
+	class GrindLevelTask {
+		constructor(targetLevel) {
+			const levelCap = page.getLevelCap();
+			if (targetLevel > levelCap) {
+				console.log(`Level ${targetLevel} is too high. Aiming for level ${levelCap} instead`);
+				targetLevel = levelCap;
+			}
+
+			this.targetLevel = targetLevel;
+		}
+
+		describe() {
+			return "grind for safari level " + this.targetLevel;
+		}
+
+		hasExpired() {
+			return (!page.isOnSafari()
+					|| page.getLevel() >= this.targetLevel)
+		}
+
+		action() {
+			if (page.inBattle()) {
+				page.throwRock();
+				return DELAY_BATTLE;
+			}
+
+			walkToLongGrass();
+			return DELAY_WALK;
+		}
+	}
+
 	let currentTask = null;
 	let tickTimeoutId = null;
 
@@ -278,14 +335,24 @@
 		startTask(new FindShinyTask());
 	}
 
+	function cmdGrindLevel(targetLevel) {
+		if (typeof targetLevel != "number" || targetLevel <= 0) {
+			console.error("targetLevel must be a positive number");
+			return;
+		}
+
+		startTask(new GrindLevelTask(targetLevel));
+	}
+
 	function cmdStop() {
 		currentTask = null;
 	}
 
 	(function main() {
 		window[WINDOW_KEY] = {
-			findShiny: cmdFindShiny,
-			stop: cmdStop,
+			findShiny:  cmdFindShiny,
+			stop:       cmdStop,
+			grindLevel: cmdGrindLevel,
 		};
 	})();
 })();
