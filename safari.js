@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Safari Ranger
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @description  This script will automate the safari zone.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -178,6 +178,26 @@
 			this.isOnSafari() && this.inBattle() && !SafariBattle.busy() && SafariBattle.throwRock();
 		},
 
+		_battleEncounters: 0,
+		_lastBattleEncounter: null,
+
+		/**
+		 * Each time this is called, increment its return value if a new encounter has been seen.
+		 * This is expected to be called frequently, and is not expected to account for
+		 * encounters which occurred entirely between two calls of this function.
+		 *
+		 * @return {number} - Number of distinct battle encounters observed by calls to this function.
+		 */
+		countBattleEncounters() {
+			const currentEncounter = SafariBattle.enemy;
+			if (this._lastBattleEncounter != currentEncounter) {
+				this._battleEncounters += 1;
+				this._lastBattleEncounter = currentEncounter;
+			}
+
+			return this._battleEncounters;
+		},
+
 		/**
 		 * Get the player's current level.
 		 *
@@ -244,18 +264,43 @@
 
 	// Attempt to find any shiny
 	class FindShinyTask {
+		constructor() {
+			this.startBattleEncounters = page.countBattleEncounters();
+			this.lastEncounterReport = 0;
+		}
+
 		describe() {
 			return "find a shiny pokemon";
 		}
 
 		hasExpired() {
-			return (!page.isOnSafari()
-					|| page.isShinyPokemonOnGrid()
-					|| (page.inBattle() && page.battlePokemonIsShiny()));
+			if (!page.isOnSafari()) {
+				return true;
+			}
+
+			if (page.isShinyPokemonOnGrid()
+					|| (page.inBattle() && page.battlePokemonIsShiny())) {
+				const endBattleEncounters = page.countBattleEncounters();
+				const taskEncounters = endBattleEncounters - this.startBattleEncounters;
+				console.log("Found a shiny after", taskEncounters, "battle encounters");
+				return true;
+			}
+
+			return false;
 		}
 
 		action() {
 			if (page.inBattle()) {
+				const encounterCount = page.countBattleEncounters();
+				const taskEncounters = encounterCount - this.startBattleEncounters;
+
+				// Only report round (1sf) numbers eg. 100, 200, 1000, 50000, etc.
+				if (taskEncounters > this.lastEncounterReport && taskEncounters >= 100
+						&& taskEncounters % 10 ** Math.floor(Math.log10(taskEncounters)) == 0) {
+					console.log("Encountered", taskEncounters, "battles so far");
+					this.lastEncounterReport = taskEncounters;
+				}
+
 				page.runFromBattle();
 				return DELAY_BATTLE;
 			}
