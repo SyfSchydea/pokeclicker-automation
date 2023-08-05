@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Safari Ranger
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.4
 // @description  This script will automate the safari zone.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -178,6 +178,26 @@
 			this.isOnSafari() && this.inBattle() && !SafariBattle.busy() && SafariBattle.throwRock();
 		},
 
+		/**
+		 * Get the number of balls the player has left.
+		 *
+		 * @return {number} - Number of balls.
+		 */
+		getBallCount() {
+			return Safari.balls();
+		},
+
+		/**
+		 * Attempt to throw a pokeball at the current enemy pokemon.
+		 */
+		throwBall() {
+			if (!this.isOnSafari() || !this.inBattle() || SafariBattle.busy() || this.getBallCount() <= 0) {
+				return;
+			}
+
+			SafariBattle.throwBall();
+		},
+
 		_battleEncounters: 0,
 		_lastBattleEncounter: null,
 
@@ -215,6 +235,50 @@
 		getLevelCap() {
 			return Safari.maxSafariLevel;
 		},
+
+		/**
+		 * Find the location of any item on the grid.
+		 * If multiple items are present, any one of them may be selected.
+		 * Cleanly returns null if no items are present.
+		 *
+		 * @return {{x: number, y:number} | null} - Object containing an item's x and y coordinates,
+		 *                                          or null if no items are present.
+		 */
+		getItemLocation() {
+			const items = Safari.itemGrid();
+			if (items.length <= 0) {
+				return null;
+			}
+
+			return items[0];
+		},
+
+		/**
+		 * Calculate the catch rate which the current enemy will have when angered,
+		 * even if they are not currently angered.
+		 * Factor is to be returned on a scale of 0 to 1, not as a percentage.
+		 *
+		 * @return {number} - Battle enemy catch rate when angered.
+		 */
+		getEnemyAngryCatchRate() {
+			const enemy = SafariBattle.enemy;
+
+			// Based on SafariPokemon.catchFactor in the game's code
+			const levelMod = enemy.levelModifier;
+			const baseCatchPercentage = enemy.baseCatchFactor;
+			const catchPercentage = baseCatchPercentage + levelMod * 10
+			const angryCatchPercentage = catchPercentage * (2 + levelMod);
+			return angryCatchPercentage / 100;
+		},
+
+		/**
+		 * Check if the current battle enemy is angry.
+		 *
+		 * @return - Truthy if the enemy is angry, falsey if not.
+		 */
+		enemyAngered() {
+			return SafariBattle.enemy.angry > 0;
+		},
 	};
 
 	//////////////////////////
@@ -246,20 +310,165 @@
 		};
 	}
 
-	// Attempt to walk into any adjacent long grass tile
-	function walkToLongGrass() {
-		const playerPos = page.getPlayerPosition();
+	function xyEqual(a, b) {
+		return a.x == b.x && a.y == b.y;
+	}
 
+	class DijkstraNode {
+		constructor(pos, cost, parent, sourceDir) {
+			this.pos = pos;
+			this.cost = cost
+			this.parent = parent;
+			this.sourceDir = sourceDir;
+
+			this.confirmed = false;
+		}
+
+		/**
+		 * Update the path leading to this node, if it has a lower cost.
+		 */
+		updatePath(cost, parent, sourceDir) {
+			if (!this.confirmed && cost < this.cost) {
+				this.cost = cost;
+				this.parent = parent;
+				this.sourceDir = sourceDir;
+			}
+		}
+
+		/**
+		 * Trace this node's tree back to find the first step in the path.
+		 * Note that the very first node in the chain will be the player's current position.
+		 * The second is the next tile which the player must walk to in order to reach this node.
+		 */
+		findFirstStep() {
+			let step = this;
+
+			while (step.parent && step.parent.parent != null) {
+				step = step.parent;
+			}
+
+			return step;
+		}
+
+		printPath() {
+			this.parent.printPath();
+			console.log("->", this.pos);
+		}
+	}
+
+	/**
+	 * Comparison function used to sort DijkstraNode by cost descending.
+	 */
+	function byCostDescending(nodeA, nodeB) {
+		return nodeB.cost - nodeA.cost;
+	}
+
+	/**
+	 * Create a key string based on a position.
+	 */
+	function posKey(pos) {
+		return pos.x + "," + pos.y;
+	}
+
+	/**
+	 * Navigate from the current player position to any tile matching the given predicate.
+	 * Will always return a path of at least length one.
+	 *
+	 * @param {function({x: number, y: number})->bool} - Function which determines which
+	 *                                                   tiles are valid destinations.
+	 *                                                   Takes the tile's position, and returns
+	 *                                                   true if it's a valid destination.
+	 * @return {DijkstraNode}                          - Path to the nearest target tile.
+	 */
+	function dijkstra(targetTilePred) {
+		const startNode = new DijkstraNode(page.getPlayerPosition(), 0, null, "start");
+
+		const activeNodes = [startNode];
+		const allNodes = new Map();
+		allNodes.set(posKey(startNode.pos, startNode));
+
+		while (activeNodes.length > 0) {
+			activeNodes.sort(byCostDescending);
+			const node = activeNodes.pop();
+
+			if (targetTilePred(node.pos) && node.dir != "start") {
+				return node;
+			}
+
+			for (const [dir, dirVec] of Object.entries(DIRECTIONS)) {
+				const nextPos = xyAdd(node.pos, dirVec);
+
+				if (page.getTileType(nextPos.x, nextPos.y) == TILE_WALL) {
+					continue;
+				}
+
+				const nextKey = posKey(nextPos);
+				let nextNode = allNodes.get(nextKey);
+				if (nextNode) {
+					nextNode.updatePath(node.cost + 1, node, dir);
+				} else {
+					nextNode = new DijkstraNode(nextPos, node.cost + 1, node, dir);
+					activeNodes.push(nextNode);
+					allNodes.set(nextKey, nextNode);
+				}
+			}
+
+			node.confirmed = true;
+		}
+
+		throw new Error("Failed to navigate to target");
+	}
+
+	// Test if the given position is long grass.
+	// Will return false for single tiles as there are not useful for grinding.
+	function isLongGrass(pos) {
+		if (page.getTileType(pos.x, pos.y) != TILE_LONG_GRASS) {
+			return false;
+		}
+
+		for (const [dir, vec] of Object.entries(DIRECTIONS)) {
+			const adjPos = xyAdd(pos, vec);
+
+			if (page.getTileType(adjPos.x, adjPos.y) == TILE_LONG_GRASS) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	// Attempt to walk into any long grass tile
+	function walkToLongGrass() {
+		// Try to find any nearby grass
+		const playerPos = page.getPlayerPosition();
 		for (const [dir, vec] of Object.entries(DIRECTIONS)) {
 			const tile = xyAdd(playerPos, vec);
 
-			if (page.getTileType(tile.x, tile.y) == TILE_LONG_GRASS) {
+			if (isLongGrass(tile)) {
 				page.move(dir);
 				return;
 			}
 		}
 
-		throw new Error("Failed to find nearby grass");
+		// Navigate to the grass if its further away
+		const path = dijkstra(isLongGrass);
+		const nextDir = path.findFirstStep().sourceDir;
+		page.move(nextDir);
+	}
+
+	/**
+	 * Attempt to walk towards the given position.
+	 *
+	 * @param itemPos {{x: number, y: number}} - Object with x and y coordinates to navigate towards.
+	 */
+	function walkTowards(itemPos) {
+		if (xyEqual(page.getPlayerPosition(), itemPos)) {
+			return;
+		}
+
+		const path = dijkstra(pos => xyEqual(pos, itemPos));
+		const nextDir = path.findFirstStep().sourceDir;
+		page.move(nextDir);
 	}
 
 	// Attempt to find any shiny
@@ -342,6 +551,53 @@
 		}
 	}
 
+	// Catch pokemon for item drops.
+	// Will throw rocks at pokemon with high catch rates to maximise catches per ball.
+	class ItemsTask {
+		describe() {
+			return "grind for item drops";
+		}
+
+		hasExpired() {
+			return !page.isOnSafari();
+		}
+
+		action() {
+			const lastBall = page.getBallCount() <= 1;
+			const itemPos = page.getItemLocation();
+
+			if (page.inBattle()) {
+				if (lastBall) {
+					if (itemPos != null) {
+						// Run from battles on the last ball so we can pick up the items
+						page.runFromBattle();
+					} else {
+						// Use the last ball once all items have been picked up
+						page.throwBall();
+					}
+				} else if (page.getEnemyAngryCatchRate() < 0.7) {
+					// Only attempt to catch pokemon which have a decent chance of catching.
+					page.runFromBattle();
+				} else if (!page.enemyAngered()) {
+					// Throw rocks at enemies to anger them before using the balls on them.
+					page.throwRock();
+				} else {
+					page.throwBall();
+				}
+
+				return DELAY_BATTLE;
+			}
+
+			if (itemPos != null) {
+				walkTowards(itemPos);
+			} else {
+				walkToLongGrass();
+			}
+
+			return DELAY_WALK;
+		}
+	}
+
 	let currentTask = null;
 	let tickTimeoutId = null;
 
@@ -389,6 +645,10 @@
 		startTask(new GrindLevelTask(targetLevel));
 	}
 
+	function cmdItems() {
+		startTask(new ItemsTask());
+	}
+
 	function cmdStop() {
 		currentTask = null;
 	}
@@ -398,6 +658,7 @@
 			findShiny:  cmdFindShiny,
 			stop:       cmdStop,
 			grindLevel: cmdGrindLevel,
+			items:      cmdItems,
 		};
 	})();
 })();
