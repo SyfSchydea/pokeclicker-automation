@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Safari Ranger
 // @namespace    http://tampermonkey.net/
-// @version      1.4
+// @version      1.4.1
 // @description  This script will automate the safari zone.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -162,6 +162,24 @@
 		battlePokemonIsShiny() {
 			const enemy = SafariBattle.enemy; // SafariPokemon object
 			return enemy && enemy.shiny;
+		},
+
+		/**
+		 * Check if the battle process is busy.
+		 *
+		 * @return - Truthy if the SafariBattle is busy. False if not.
+		 */
+		battleIsBusy() {
+			return SafariBattle.busy();
+		},
+
+		/**
+		 * Make the SafariBattle not be busy.
+		 * There is a bug where sometimes the busy flag gets stuck on, and the whole UI becomes completely soft-locked.
+		 * This function may be used to fix this state, but also may be considered kind of cheaty, so use sparingly.
+		 */
+		battleFixStuckBusy() {
+			SafariBattle.busy(false);
 		},
 
 		/**
@@ -471,6 +489,30 @@
 		page.move(nextDir);
 	}
 
+	let _busyStreak = 0;
+	// Call battleFixStuckBusy if the game has been busy for too long.
+	// return true if battleFixStuckBusy was called.
+	function unstuckBusy() {
+		if (!page.isOnSafari() || !page.inBattle()) {
+			return false;
+		}
+
+		if (page.battleIsBusy()) {
+			_busyStreak += 1;
+		} else {
+			_busyStreak = 0;
+			return false;
+		}
+
+		if (_busyStreak >= 10) {
+			page.battleFixStuckBusy();
+			_busyStreak = 0;
+			return true;
+		}
+
+		return false;
+	}
+
 	// Attempt to find any shiny
 	class FindShinyTask {
 		constructor() {
@@ -502,6 +544,10 @@
 			if (page.inBattle()) {
 				const encounterCount = page.countBattleEncounters();
 				const taskEncounters = encounterCount - this.startBattleEncounters;
+
+				if (unstuckBusy()) {
+					return DELAY_BATTLE;
+				}
 
 				// Only report round (1sf) numbers eg. 100, 200, 1000, 50000, etc.
 				if (taskEncounters > this.lastEncounterReport && taskEncounters >= 100
@@ -542,6 +588,10 @@
 
 		action() {
 			if (page.inBattle()) {
+				if (unstuckBusy()) {
+					return DELAY_BATTLE;
+				}
+
 				page.throwRock();
 				return DELAY_BATTLE;
 			}
@@ -567,6 +617,10 @@
 			const itemPos = page.getItemLocation();
 
 			if (page.inBattle()) {
+				if (unstuckBusy()) {
+					return DELAY_BATTLE;
+				}
+
 				if (lastBall) {
 					if (itemPos != null) {
 						// Run from battles on the last ball so we can pick up the items
