@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Safari Ranger
 // @namespace    http://tampermonkey.net/
-// @version      1.4.1
+// @version      1.5
 // @description  This script will automate the safari zone.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -162,6 +162,27 @@
 		battlePokemonIsShiny() {
 			const enemy = SafariBattle.enemy; // SafariPokemon object
 			return enemy && enemy.shiny;
+		},
+
+		/**
+		 * Find the name of the pokemon which the player is currently battling.
+		 * Behaviour is undefined if the player is not currently in a safari battle.
+		 *
+		 * @return {string} - Name of the battle pokemon.
+		 */
+		getBattlePokemonName() {
+			const enemy = SafariBattle.enemy; // SafariPokemon object
+			return enemy && enemy.name;
+		},
+
+		/**
+		 * Test if the player has obtained a shiny of the given species.
+		 *
+		 * @param pkmnName {string} - Name of the species to check.
+		 * @return                  - Truthy if the player has this shiny, falsey if not.
+		 */
+		hasShiny(pkmnName) {
+			return App.game.party.alreadyCaughtPokemonByName(pkmnName, true);
 		},
 
 		/**
@@ -515,13 +536,20 @@
 
 	// Attempt to find any shiny
 	class FindShinyTask {
-		constructor() {
+		constructor(allowDupe=false) {
+			this.allowDupe = allowDupe;
+
 			this.startBattleEncounters = page.countBattleEncounters();
 			this.lastEncounterReport = 0;
 		}
 
+		getEncounterCount() {
+			const encounterCount = page.countBattleEncounters();
+			return encounterCount - this.startBattleEncounters;
+		}
+
 		describe() {
-			return "find a shiny pokemon";
+			return "find a " + (this.allowDupe? "" : "new ") + "shiny pokemon";
 		}
 
 		hasExpired() {
@@ -529,21 +557,38 @@
 				return true;
 			}
 
-			if (page.isShinyPokemonOnGrid()
-					|| (page.inBattle() && page.battlePokemonIsShiny())) {
-				const endBattleEncounters = page.countBattleEncounters();
-				const taskEncounters = endBattleEncounters - this.startBattleEncounters;
-				console.log("Found a shiny after", taskEncounters, "battle encounters");
-				return true;
+			let foundShiny = false;
+			if (page.isShinyPokemonOnGrid()) {
+				foundShiny = true;
 			}
 
-			return false;
+			battleShinyCheck: if (page.inBattle() && page.battlePokemonIsShiny()) {
+				if (this.allowDupe) {
+					foundShiny = true;
+					break battleShinyCheck;
+				}
+
+				const shinyName = page.getBattlePokemonName();
+				if (page.hasShiny(shinyName)) {
+					console.log("Ignoring duplicate shiny", shinyName,
+							"at", this.getEncounterCount(), "encounters");
+				} else {
+					foundShiny = true;
+				}
+			}
+
+			if (foundShiny) {
+				const taskEncounters = this.getEncounterCount();
+				console.log("Found a " + (this.allowDupe? "" : "new ")
+						+ "shiny after", taskEncounters, "battle encounters");
+			}
+
+			return foundShiny;
 		}
 
 		action() {
 			if (page.inBattle()) {
-				const encounterCount = page.countBattleEncounters();
-				const taskEncounters = encounterCount - this.startBattleEncounters;
+				const taskEncounters = this.getEncounterCount();
 
 				if (unstuckBusy()) {
 					return DELAY_BATTLE;
@@ -686,8 +731,8 @@
 		scheduleTick(DELAY_TASK_START);
 	}
 
-	function cmdFindShiny() {
-		startTask(new FindShinyTask());
+	function cmdFindShiny(allowDupes=false) {
+		startTask(new FindShinyTask(allowDupes));
 	}
 
 	function cmdGrindLevel(targetLevel) {
