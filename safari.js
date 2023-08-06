@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Safari Ranger
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.5.1
 // @description  This script will automate the safari zone.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -127,21 +127,22 @@
 		// }
 
 		/**
-		 * Test if there is a shiny pokemon currently on the safari grid.
+		 * Fetch a list of names of shiny pokemon on the safari grid.
 		 *
-		 * @return - Truthy if there is a shiny pokemon currently on the grid, falsey if not.
+		 * @return - Array-like of shiny pokemon names as strings.
 		 */
-		isShinyPokemonOnGrid() {
+		getShinyPokemonOnGrid() {
 			const onGridPokemon = Safari.pokemonGrid();
+			const shinies = [];
 			for (let i = 0; i < onGridPokemon.length; ++i) {
 				const pkmn = onGridPokemon[i];
 
 				if (pkmn.shiny) {
-					return true;
+					shinies.push(pkmn.name);
 				}
 			}
 
-			return false;
+			return shinies;
 		},
 
 		/**
@@ -558,8 +559,19 @@
 			}
 
 			let foundShiny = false;
-			if (page.isShinyPokemonOnGrid()) {
-				foundShiny = true;
+			for (const shiny of page.getShinyPokemonOnGrid()) {
+				if (this.allowDupe) {
+					foundShiny = true;
+					break;
+				}
+
+				if (page.hasShiny(shiny)) {
+					console.log("Ignoring duplicate shiny", shiny,
+							"at", this.getEncounterCount(), "encounters");
+				} else {
+					foundShiny = true;
+					break;
+				}
 			}
 
 			battleShinyCheck: if (page.inBattle() && page.battlePokemonIsShiny()) {
