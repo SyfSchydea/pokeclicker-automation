@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Safari Ranger
 // @namespace    http://tampermonkey.net/
-// @version      1.5.1
+// @version      1.5.2
 // @description  This script will automate the safari zone.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -549,6 +549,16 @@
 			return encounterCount - this.startBattleEncounters;
 		}
 
+		reportDupeShiny(name) {
+			const count = this.getEncounterCount();
+
+			if (count > this.lastEncounterReport) {
+				console.log("Ignoring duplicate shiny", name,
+						"at", count, "encounters");
+				this.lastEncounterReport = count;
+			}
+		}
+
 		describe() {
 			return "find a " + (this.allowDupe? "" : "new ") + "shiny pokemon";
 		}
@@ -566,8 +576,7 @@
 				}
 
 				if (page.hasShiny(shiny)) {
-					console.log("Ignoring duplicate shiny", shiny,
-							"at", this.getEncounterCount(), "encounters");
+					this.reportDupeShiny(shiny);
 				} else {
 					foundShiny = true;
 					break;
@@ -582,8 +591,7 @@
 
 				const shinyName = page.getBattlePokemonName();
 				if (page.hasShiny(shinyName)) {
-					console.log("Ignoring duplicate shiny", shinyName,
-							"at", this.getEncounterCount(), "encounters");
+					this.reportDupeShiny(shinyName);
 				} else {
 					foundShiny = true;
 				}
