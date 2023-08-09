@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Safari Ranger
 // @namespace    http://tampermonkey.net/
-// @version      1.5.2
+// @version      1.5.3
 // @description  This script will automate the safari zone.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -542,6 +542,7 @@
 
 			this.startBattleEncounters = page.countBattleEncounters();
 			this.lastEncounterReport = 0;
+			this.recentGridShinies = [];
 		}
 
 		getEncounterCount() {
@@ -550,6 +551,18 @@
 		}
 
 		reportDupeShiny(name) {
+			/*
+			 * This check exists to avoid reporting on a dupe shiny on the field multiple times.
+			 * This method does have a minor bug in that if a dupe shiny spawns
+			 * while another shiny of the same species is already present, or despawned the previous frame,
+			 * then it won't report on that second shiny.
+			 * But since this is such a rare occurrence, and it can only concern a dupe shiny we aren't hunting,
+			 * I'm choosing not to care about it.
+			 */
+			if (this.recentGridShinies.includes(name)) {
+				return;
+			}
+
 			const count = this.getEncounterCount();
 
 			if (count > this.lastEncounterReport) {
@@ -569,12 +582,14 @@
 			}
 
 			let foundShiny = false;
-			for (const shiny of page.getShinyPokemonOnGrid()) {
+			const currentGridShinies = page.getShinyPokemonOnGrid();
+			for (let i = 0; i < currentGridShinies.length; ++i) {
 				if (this.allowDupe) {
 					foundShiny = true;
 					break;
 				}
 
+				const shiny = currentGridShinies[i];
 				if (page.hasShiny(shiny)) {
 					this.reportDupeShiny(shiny);
 				} else {
@@ -596,6 +611,8 @@
 					foundShiny = true;
 				}
 			}
+
+			this.recentGridShinies = currentGridShinies;
 
 			if (foundShiny) {
 				const taskEncounters = this.getEncounterCount();
