@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Digger
 // @namespace    http://tampermonkey.net/
-// @version      1.5.1
+// @version      1.5.2
 // @description  Automates digging underground in Pokéclicker.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -57,6 +57,15 @@
 		 */
 		gameLoaded() {
 			return App && App.game;
+		},
+
+		/**
+		 * Check if the player can access the underground minigame.
+		 *
+		 * @return - Truthy if the player is able to play the underground. Falsey if not.
+		 */
+		canAccess() {
+			return App.game.underground.canAccess();
 		},
 
 		/**
@@ -514,7 +523,7 @@
 	function tick() {
 		tickTimeoutId = null;
 
-		if (!page.gameLoaded()) {
+		if (!page.gameLoaded() || !page.canAccess()) {
 			return scheduleTick(DELAY_INIT);
 		}
 
