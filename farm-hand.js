@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.24.1
+// @version      1.24.2
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -35,6 +35,15 @@
 	const GROWTH_STAGE_DEATH  = 4;
 
 	const page = {
+		/**
+		 * Check if the player can access the farming minigame.
+		 *
+		 * @return - Truthy if the player can access farming. Falsey otherwise.
+		 */
+		canAccess() {
+			return App.game && App.game.farming.canAccess();
+		},
+
 		/**
 		 * Not required by interface.
 		 * Fetch the game's farming module if the player has unlocked it.
@@ -1797,6 +1806,10 @@
 	}
 
 	function tick() {
+		if (!page.canAccess()) {
+			return scheduleTick(DELAY_IDLE);
+		}
+
 		if (currentTask && currentTask.hasExpired()) {
 			console.log("Farming task has expired");
 			currentTask = currentTask.expire? currentTask.expire() : null;
