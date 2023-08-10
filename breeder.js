@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PokéClicker - Auto-breeder
 // @namespace    http://tampermonkey.net/
-// @version      1.17.5
+// @version      1.17.6
 // @description  Handles breeding eggs automatically
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -32,8 +32,8 @@
 		 *
 		 * @return {boolean} - True if the player can access breeding, false otherwise.
 		 */
-		_canAccessBreeding() {
-			return App.game.breeding.canAccess();
+		canAccessBreeding() {
+			return App.game && App.game.breeding.canAccess();
 		},
 
 		/**
@@ -43,7 +43,7 @@
 		 * @return                 - Truthy if the egg was hatched successfully, falsey otherwise.
 		 */
 		hatch(eggIdx) {
-			if (!this._canAccessBreeding()) {
+			if (!this.canAccessBreeding()) {
 				return false;
 			}
 
@@ -72,7 +72,7 @@
 		 */
 		canBreed() {
 			const breeding = App.game.breeding;
-			return this._canAccessBreeding() && (breeding.hasFreeEggSlot() || breeding.hasFreeQueueSlot());
+			return this.canAccessBreeding() && (breeding.hasFreeEggSlot() || breeding.hasFreeQueueSlot());
 		},
 
 		/**
@@ -550,6 +550,11 @@
 	 * Intended to be called regularly.
 	 */
 	function tick() {
+		if(!page.canAccessBreeding()) {
+			setTimeout(tick, DELAY_IDLE);
+			return;
+		}
+
 		if (currentTask && currentTask.hasExpired()) {
 			console.log("Breeding task expired");
 			currentTask = null;
