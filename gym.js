@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Poké-clicker - Gym Runner
 // @namespace    http://tampermonkey.net/
-// @version      1.2.1
-// @description  Runs gyms automatically before 100 clears.
+// @version      1.2.1.1
+// @description  Runs gyms automatically.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
 // @grant        none
