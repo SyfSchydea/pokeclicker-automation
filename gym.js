@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Gym Runner
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.2.1
 // @description  Runs gyms automatically before 100 clears.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -98,7 +98,7 @@
 		constructor(clears, eliteIdx=0) {
 			const currentClears = page.getGymClears(eliteIdx);
 
-			this.targetClears = Math.min(currentClears + clears, 100);
+			this.targetClears = currentClears + clears, 100;
 			this.expectedClears = currentClears;
 			this.eliteIdx = eliteIdx;
 		}
