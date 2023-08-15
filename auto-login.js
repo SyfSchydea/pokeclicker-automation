@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Login
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @description  Automatically re-logs in, if you refresh
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -46,6 +46,15 @@
 
 			card.click();
 		},
+
+		/**
+		 * Check if the Save Selector menu is currently open.
+		 *
+		 * @return - Truthy if the Save Selector menu is open, or falsey if not.
+		 */
+		isSaveSelectorOpen() {
+			return document.querySelector(".trainer-card");
+		},
 	};
 
 	//////////////////////////
@@ -64,19 +73,23 @@
 	const DELAY_WAIT  = 30 * 1000;
 
 	function tick() {
-		let key = sessionStorage.getItem(SSKEY_SAVE_KEY);
-		if (key != null) {
-			page.loadSave(key);
-			return;
+		const cachedKey = sessionStorage.getItem(SSKEY_SAVE_KEY);
+
+		if (page.isSaveSelectorOpen()) {
+			if (cachedKey != null) {
+				page.loadSave(cachedKey);
+				return;
+			}
+		} else {
+			const key = page.getSaveKey();
+			if (key != "") {
+				sessionStorage.setItem(SSKEY_SAVE_KEY, key);
+				return;
+			}
 		}
 
-		key = page.getSaveKey();
-		if (key != "") {
-			sessionStorage.setItem(SSKEY_SAVE_KEY, key);
-			return;
-		}
-
-		setTimeout(tick, DELAY_WAIT);
+		const wait = cachedKey? DELAY_LOGIN : DELAY_WAIT;
+		setTimeout(tick, wait);
 	}
 
 	(function main() {
