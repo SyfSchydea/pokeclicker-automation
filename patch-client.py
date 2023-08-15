@@ -11,6 +11,7 @@ SCRIPT_SOURCE_FILES = [
 	"farm-hand.js",
 	"gym.js",
 	"safari.js",
+	"auto-login.js",
 ]
 
 # relative to game's home directory
