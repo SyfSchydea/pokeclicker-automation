@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Login
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.1.1
 // @description  Automatically re-logs in, if you refresh
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -53,7 +53,7 @@
 		 * @return - Truthy if the Save Selector menu is open, or falsey if not.
 		 */
 		isSaveSelectorOpen() {
-			return document.querySelector(".trainer-card");
+			return document.querySelector("#saveSelector");
 		},
 	};
 
