@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PokéClicker - Auto-breeder
 // @namespace    http://tampermonkey.net/
-// @version      1.18
+// @version      1.19
 // @description  Handles breeding eggs automatically
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -236,15 +236,24 @@
 		},
 
 		/**
-		 * Check if the player has at least one fossil or egg item.
+		 * Check if the player has at least one egg item.
 		 *
 		 * @param requireShinies - True if shinies should be obtained from eggs.
 		 *                         False if only non-shinies are expected from eggs.
-		 * @return               - Truthy if the player has an fossil or egg item.
+		 * @return               - Truthy if the player has an egg item.
 		 *                         Falsey otherwise.
 		 */
-		hasFossilOrEggItem(requireShinies=false) {
-			return this._getOwnedFossil() != null || this._getHatchableEggItemName(requireShinies) != null;
+		hasEggItem(requireShinies=false) {
+			return this._getHatchableEggItemName(requireShinies) != null;
+		},
+
+		/**
+		 * Check if the player has at least one fossil which should be hatched.
+		 *
+		 * @return - Truthy if the player has an fossil. Falsey otherwise.
+		 */
+		hasFossil() {
+			return this._getOwnedFossil() != null;
 		},
 
 		/**
@@ -437,8 +446,10 @@
 
 	const WINDOW_KEY = "breed";
 	const LSKEY_SETTINGS = "syfschydea--breeder--settings--";
+	const SSKEY_SETTINGS = "syfschydea--breeder--settings";
 
 	const SETTINGS_KEY_EGG_SHINIES = "egg-shinies";
+	const SETTINGS_KEY_EGG_PAUSE = "egg-pause";
 
 	// Delays following certain actions
 	const DELAY_HATCH   =           800;
@@ -456,7 +467,8 @@
 	// The script will not automatically put more than this many pokemon into the breeding queue.
 	const QUEUE_LENGTH_CAP = 5;
 
-	function getSettings() {
+	// Fetch settings which are specific to the currently loaded save.
+	function getSaveSettings() {
 		const settingsJson = localStorage.getItem(LSKEY_SETTINGS + page.getSaveKey());
 		if (settingsJson) {
 			return JSON.parse(settingsJson);
@@ -465,18 +477,55 @@
 		}
 	}
 
-	function saveSettings(newSettings) {
+	// Write settings which are specific to the currently loaded save.
+	function writeSaveSettings(newSettings) {
 		localStorage.setItem(LSKEY_SETTINGS + page.getSaveKey(),
 				JSON.stringify(newSettings));
 	}
 
+	// Fetch settings which are specific to the current session.
+	function getSessionSettings() {
+		const settingsJson = sessionStorage.getItem(SSKEY_SETTINGS);
+		if (settingsJson) {
+			return JSON.parse(settingsJson);
+		} else {
+			return {};
+		}
+	}
+
+	// Write settings which are specific to the current session.
+	function writeSessionSettings(newSettings) {
+		sessionStorage.setItem(SSKEY_SETTINGS, JSON.stringify(newSettings));
+	}
+
+	// Check if we should keep hatching egg items until all shinies are obtained.
+	// Save-level setting.
 	function getEggShinySetting() {
-		const settings = getSettings();
+		const settings = getSaveSettings();
 		if (SETTINGS_KEY_EGG_SHINIES in settings) {
 			return settings[SETTINGS_KEY_EGG_SHINIES];
 		} else {
 			return false;
 		}
+	}
+
+	// Check if egg item hatching is paused.
+	// Session-level setting.
+	function getEggItemPause() {
+		const settings = getSessionSettings();
+		if (SETTINGS_KEY_EGG_PAUSE in settings) {
+			return settings[SETTINGS_KEY_EGG_PAUSE];
+		} else {
+			return false;
+		}
+	}
+
+	// Set egg item pause.
+	// Session-level setting.
+	function setEggItemPause(val) {
+		const settings = getSessionSettings();
+		settings[SETTINGS_KEY_EGG_PAUSE] = val;
+		writeSessionSettings(settings);
 	}
 
 	/**
@@ -605,19 +654,22 @@
 		}
 
 		let canBreed = page.canBreed();
-		const eggShinies = getEggShinySetting();
+		const eggPause = getEggItemPause();
+		const eggShinies = !eggPause && getEggShinySetting();
 
-		if (page.hasFossilOrEggItem(eggShinies)) {
+		if (page.hasFossil() || (!eggPause && page.hasEggItem(eggShinies))) {
 			let hasFreeEggSlot = page.hasFreeEggSlot();
 
-			// Put a fossil in
+			// Put a fossil or egg item in
 			if (canBreed && hasFreeEggSlot) {
-				page.useEggItemIfPresent(eggShinies) || page.useFossilIfPresent();
+				if(!page.useFossilIfPresent() && !eggPause) {
+					page.useEggItemIfPresent(eggShinies);
+				}
 				setTimeout(tick, DELAY_BREED);
 				return;
 			}
 
-			// Clear the queue to make room for a fossil
+			// Clear the queue to make room for a fossil/egg
 			if (!hasFreeEggSlot && page.hasPokemonInQueue()) {
 				page.removeFromQueue();
 				setTimeout(tick, DELAY_HATCH);
@@ -706,19 +758,33 @@
 	 * @param enable - Truthy to hatch mystery eggs for shinies. Falsey to only aim to hatch non-shinies.
 	 */
 	function cmdSetEggShinies(enable) {
-		const settings = getSettings();
+		const settings = getSaveSettings();
 		settings[SETTINGS_KEY_EGG_SHINIES] = !!enable;
-		saveSettings(settings);
+		writeSaveSettings(settings);
 
 		console.log("Hatching eggs to catch " + (enable? "shinies" : "unique species"));
+	}
+
+	/**
+	 * User facing command.
+	 * Set whether or not egg item hatching should be paused.
+	 *
+	 * @param pause - Truthy to temporarily stop hatching egg items. Falsey to resume.
+	 */
+	function cmdSetEggPause(pause=true) {
+		setEggItemPause(!!pause);
+
+		console.log((pause? "Paused" : "Resumed") + " hatching egg items."
+				+ (pause? `\nRun '${WINDOW_KEY}.pauseEggs(false)' to resume.` : ""));
 	}
 
 	(function main() {
 		setTimeout(tick, DELAY_INITIAL);
 
 		window[WINDOW_KEY] = {
-			type: cmdPreferType,
+			type:          cmdPreferType,
 			setEggShinies: cmdSetEggShinies,
+			pauseEggs:     cmdSetEggPause,
 		};
 
 		console.log("Loaded auto-breeder");
