@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PokéClicker - Auto-breeder
 // @namespace    http://tampermonkey.net/
-// @version      1.17.6
+// @version      1.18
 // @description  Handles breeding eggs automatically
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -166,9 +166,11 @@
 		 * Only eggs which are able to give the player a new species should be returned.
 		 * If the player owns multiple, any of the owned items are acceptable
 		 *
+		 * @param requireShinies - Truthy if eggs should be hatched until all shinies are obtained,
+		 *                         Falsey if only all non-shinies should be required.
 		 * @return {string|null} - Name of the egg item if the player has one. Null otherwise.
 		 */
-		_getHatchableEggItemName() {
+		_getHatchableEggItemName(requireShinies=false) {
 			for (let i = 0;; ++i) {
 				let eggName = GameConstants.EggItemType[i];
 				if (!eggName) {
@@ -181,7 +183,9 @@
 				}
 
 				let item = ItemList[eggName];
-				if (item.getCaughtStatus()) {
+				const cs = item.getCaughtStatus();
+				if (cs == CaughtStatus.CaughtShiny
+						|| (!requireShinies && cs == CaughtStatus.Caught)) {
 					continue;
 				}
 
@@ -234,23 +238,28 @@
 		/**
 		 * Check if the player has at least one fossil or egg item.
 		 *
-		 * @return - Truthy if the player has an fossil or egg item. Falsey otherwise.
+		 * @param requireShinies - True if shinies should be obtained from eggs.
+		 *                         False if only non-shinies are expected from eggs.
+		 * @return               - Truthy if the player has an fossil or egg item.
+		 *                         Falsey otherwise.
 		 */
-		hasFossilOrEggItem() {
-			return this._getOwnedFossil() != null || this._getHatchableEggItemName() != null;
+		hasFossilOrEggItem(requireShinies=false) {
+			return this._getOwnedFossil() != null || this._getHatchableEggItemName(requireShinies) != null;
 		},
 
 		/**
 		 * Attempt to start hatching an egg if the player has one.
 		 *
-		 * @return - Truthy if a egg was bred, falsey otherwise.
+		 * @param requireShinies - True if shinies should be obtained from eggs.
+		 *                         False if only non-shinies are expected from eggs.
+		 * @return               - Truthy if a egg was bred, falsey otherwise.
 		 */
-		useEggItemIfPresent() {
+		useEggItemIfPresent(requireShinies=false) {
 			if (!this.canBreed()) {
 				return false;
 			}
 
-			let eggName = this._getHatchableEggItemName();
+			let eggName = this._getHatchableEggItemName(requireShinies);
 			if (eggName == null) {
 				return false;
 			}
@@ -406,6 +415,15 @@
 		getHighestRegion() {
 			return player.highestRegion();
 		},
+
+		/**
+		 * Fetch the save key of the currently loaded save.
+		 *
+		 * @return {string} - Save key if currently logged in, or an empty string if not.
+		 */
+		getSaveKey() {
+			return Save.key;
+		},
 	};
 
 	//////////////////////////
@@ -418,6 +436,9 @@
 	 */
 
 	const WINDOW_KEY = "breed";
+	const LSKEY_SETTINGS = "syfschydea--breeder--settings--";
+
+	const SETTINGS_KEY_EGG_SHINIES = "egg-shinies";
 
 	// Delays following certain actions
 	const DELAY_HATCH   =           800;
@@ -434,6 +455,29 @@
 
 	// The script will not automatically put more than this many pokemon into the breeding queue.
 	const QUEUE_LENGTH_CAP = 5;
+
+	function getSettings() {
+		const settingsJson = localStorage.getItem(LSKEY_SETTINGS + page.getSaveKey());
+		if (settingsJson) {
+			return JSON.parse(settingsJson);
+		} else {
+			return {};
+		}
+	}
+
+	function saveSettings(newSettings) {
+		localStorage.setItem(LSKEY_SETTINGS + page.getSaveKey(),
+				JSON.stringify(newSettings));
+	}
+
+	function getEggShinySetting() {
+		const settings = getSettings();
+		if (SETTINGS_KEY_EGG_SHINIES in settings) {
+			return settings[SETTINGS_KEY_EGG_SHINIES];
+		} else {
+			return false;
+		}
+	}
 
 	/**
 	 * Swap two values in an array.
@@ -561,13 +605,14 @@
 		}
 
 		let canBreed = page.canBreed();
+		const eggShinies = getEggShinySetting();
 
-		if (page.hasFossilOrEggItem()) {
+		if (page.hasFossilOrEggItem(eggShinies)) {
 			let hasFreeEggSlot = page.hasFreeEggSlot();
 
 			// Put a fossil in
 			if (canBreed && hasFreeEggSlot) {
-				page.useEggItemIfPresent() || page.useFossilIfPresent();
+				page.useEggItemIfPresent(eggShinies) || page.useFossilIfPresent();
 				setTimeout(tick, DELAY_BREED);
 				return;
 			}
@@ -654,11 +699,26 @@
 				"for", Math.floor(minutes / 60), "hours");
 	}
 
+	/**
+	 * User facing command.
+	 * Set whether or not mystery eggs should be hatched for shinies, or only to get non-shinies.
+	 *
+	 * @param enable - Truthy to hatch mystery eggs for shinies. Falsey to only aim to hatch non-shinies.
+	 */
+	function cmdSetEggShinies(enable) {
+		const settings = getSettings();
+		settings[SETTINGS_KEY_EGG_SHINIES] = !!enable;
+		saveSettings(settings);
+
+		console.log("Hatching eggs to catch " + (enable? "shinies" : "unique species"));
+	}
+
 	(function main() {
 		setTimeout(tick, DELAY_INITIAL);
 
 		window[WINDOW_KEY] = {
 			type: cmdPreferType,
+			setEggShinies: cmdSetEggShinies,
 		};
 
 		console.log("Loaded auto-breeder");
