@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Login
 // @namespace    http://tampermonkey.net/
-// @version      1.1.1
+// @version      1.2
 // @description  Automatically re-logs in, if you refresh
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -53,7 +53,45 @@
 		 * @return - Truthy if the Save Selector menu is open, or falsey if not.
 		 */
 		isSaveSelectorOpen() {
-			return document.querySelector("#saveSelector");
+			return document.querySelector("#saveSelector") && document.querySelector(".trainer-card");
+		},
+
+		/**
+		 * Fetch data for the current save.
+		 * Will cause an auto-save of the main game as a side-effect.
+		 *
+		 * @return - JSON-encodable value containing information about the current save.
+		 */
+		getCurrentSave() {
+			Save.store(player);
+
+			const key = Save.key;
+			const playerData = JSON.parse(localStorage.getItem("player"   + key));
+			const save       = JSON.parse(localStorage.getItem("save"     + key));
+			const settings   = JSON.parse(localStorage.getItem("settings" + key));
+
+			return {
+				key,
+				player: playerData,
+				save,
+				settings,
+			};
+		},
+
+		/**
+		 * Load a previously stored save back into the game.
+		 * Will not replace and actively running game,
+		 * but only modify the game's saves to then load them from the Save Selector.
+		 *
+		 * @param save      - Data about the game save, in the same format as returned by page.getCurrentSave().
+		 * @return {string} - The save.key, which this save was written to.
+		 */
+		restoreSave(save) {
+			localStorage.setItem("player"   + save.key, JSON.stringify(save.player));
+			localStorage.setItem("save"     + save.key, JSON.stringify(save.save));
+			localStorage.setItem("settings" + save.key, JSON.stringify(save.settings));
+
+			return save.key;
 		},
 	};
 
@@ -67,15 +105,26 @@
 	 */
 
 	const KEY_PREFIX = "syfschydea--auto-login--";
-	const SSKEY_SAVE_KEY = KEY_PREFIX + "save-key";
+	const SSKEY_SAVE_KEY     = KEY_PREFIX + "save-key";
+	const SSKEY_SAVE_STATE   = KEY_PREFIX + "save-state--";
+	const SSKEY_NEXT_LOAD_ID = KEY_PREFIX + "next-load-id";
 
 	const DELAY_LOGIN =       500;
 	const DELAY_WAIT  = 30 * 1000;
 
 	function tick() {
-		const cachedKey = sessionStorage.getItem(SSKEY_SAVE_KEY);
+		let cachedKey = sessionStorage.getItem(SSKEY_SAVE_KEY);
 
 		if (page.isSaveSelectorOpen()) {
+			const stateToLoad = sessionStorage.getItem(SSKEY_NEXT_LOAD_ID);
+			if (stateToLoad != null) {
+				const stateJson = sessionStorage.getItem(SSKEY_SAVE_STATE + stateToLoad);
+				const state = JSON.parse(stateJson);
+				cachedKey = page.restoreSave(state);
+
+				sessionStorage.removeItem(SSKEY_NEXT_LOAD_ID);
+			}
+
 			if (cachedKey != null) {
 				page.loadSave(cachedKey);
 				return;
@@ -92,7 +141,46 @@
 		setTimeout(tick, wait);
 	}
 
+	/**
+	 * Exported Function.
+	 * Stores the current state of the game into sessionStorage.
+	 *
+	 * @param saveId {string} - Identifier used to reference this save later.
+	 */
+	function saveState(saveId) {
+		const save = page.getCurrentSave();
+		sessionStorage.setItem(SSKEY_SAVE_STATE + saveId, JSON.stringify(save));
+	}
+
+	/**
+	 * Exported Function.
+	 * Loads a previously saved game state.
+	 * Will reload the page to achieve this.
+	 *
+	 * @param saveId {string} - Identifier of state to load.
+	 */
+	function loadState(saveId) {
+		if (sessionStorage.getItem(SSKEY_SAVE_STATE + saveId) == null) {
+			throw new Error(`Save '${saveId}' not found`);
+		}
+
+		sessionStorage.setItem(SSKEY_NEXT_LOAD_ID, saveId);
+		location.reload();
+	}
+
+	function exposeFunctions() {
+		if (!window.syfScripts) {
+			window.syfScripts = {};
+		}
+
+		window.syfScripts.saveManager = {
+			saveState,
+			loadState,
+		};
+	}
+
 	(function main() {
+		exposeFunctions();
 		tick();
 	})();
 })();
