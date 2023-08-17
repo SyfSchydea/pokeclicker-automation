@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PokéClicker - Auto-breeder
 // @namespace    http://tampermonkey.net/
-// @version      1.20
+// @version      1.21
 // @description  Handles breeding eggs automatically
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -549,6 +549,7 @@
 
 	Setting.eggShinies      = new Setting(SETTINGS_SCOPE_SAVE,    "egg-shinies", false);
 	Setting.eggPause        = new Setting(SETTINGS_SCOPE_SESSION, "egg-pause", false);
+	Setting.hatchPause      = new Setting(SETTINGS_SCOPE_SESSION, "hatch-pause", false);
 	Setting.saveScumShinies = new Setting(SETTINGS_SCOPE_SESSION, "save-scumming-shiny", false);
 	Setting.saveScumStartShinyCount =
 	                          new Setting(SETTINGS_SCOPE_SESSION, "save-scumming-shinies-at-start", 0);
@@ -750,15 +751,17 @@
 		}
 
 		// Hatch an egg
-		for (let i = 0; i < 4; ++i) {
-			if (page.hatch(i)) {
-				hatchCount += 1;
-				if (hatchCount % HATCH_LOG_INTERVAL == 0) {
-					console.log(`Auto-hatched ${hatchCount} eggs this session`);
-				}
+		if (!Setting.hatchPause.get()) {
+			for (let i = 0; i < 4; ++i) {
+				if (page.hatch(i)) {
+					hatchCount += 1;
+					if (hatchCount % HATCH_LOG_INTERVAL == 0) {
+						console.log(`Auto-hatched ${hatchCount} eggs this session`);
+					}
 
-				setTimeout(tick, DELAY_HATCH);
-				return;
+					setTimeout(tick, DELAY_HATCH);
+					return;
+				}
 			}
 		}
 
@@ -823,15 +826,28 @@
 
 	/**
 	 * User facing command.
-	 * Set whether or not egg item hatching should be paused.
+	 * Set whether or not egg item incubating should be paused.
 	 *
-	 * @param pause - Truthy to temporarily stop hatching egg items. Falsey to resume.
+	 * @param pause - Truthy to temporarily stop incubating egg items. Falsey to resume.
 	 */
 	function cmdSetEggPause(pause=true) {
 		Setting.eggPause.set(!!pause);
 
-		console.log((pause? "Paused" : "Resumed") + " hatching egg items."
+		console.log((pause? "Paused" : "Resumed") + " incubating egg items."
 				+ (pause? `\nRun '${WINDOW_KEY}.pauseEggs(false)' to resume.` : ""));
+	}
+
+	/**
+	 * User facing command.
+	 * Set whether or not hatching should be paused.
+	 *
+	 * @param pause - Truthy to temporarily stop hatching eggs. Falsey to resume.
+	 */
+	function cmdSetHatchPause(pause=true) {
+		Setting.hatchPause.set(!!pause);
+
+		console.log((pause? "Paused" : "Resumed") + " hatching eggs."
+				+ (pause? `\nRun '${WINDOW_KEY}.pauseHatch(false)' to resume.` : ""));
 	}
 
 	/**
@@ -873,6 +889,7 @@
 			type:          cmdPreferType,
 			setEggShinies: cmdSetEggShinies,
 			pauseEggs:     cmdSetEggPause,
+			pauseHatch:    cmdSetHatchPause,
 			saveScumShiny: cmdSetSaveScumShiny,
 		};
 
