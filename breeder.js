@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PokéClicker - Auto-breeder
 // @namespace    http://tampermonkey.net/
-// @version      1.21
+// @version      1.22
 // @description  Handles breeding eggs automatically
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -28,12 +28,20 @@
 	const page = {
 		/**
 		 * Check if the player is able to access the breeding system.
-		 * Not required by interface.
 		 *
-		 * @return {boolean} - True if the player can access breeding, false otherwise.
+		 * @return - Truthy if the player can access breeding, falsey otherwise.
 		 */
 		canAccessBreeding() {
-			return App.game && App.game.breeding.canAccess();
+			return this.gameLoaded() && App.game.breeding.canAccess();
+		},
+
+		/**
+		 * Test if the game has loaded.
+		 *
+		 * @return - Truthy if the game has loaded, false otherwise.
+		 */
+		gameLoaded() {
+			return App.game;
 		},
 
 		/**
@@ -503,7 +511,7 @@
 	const DELAY_HATCH   =           800;
 	const DELAY_BREED   =           800;
 	const DELAY_IDLE    =     30 * 1000;
-	const DELAY_INITIAL =     30 * 1000;
+	const DELAY_INITIAL =      5 * 1000;
 
 	// How often to report hatched eggs. Report every nth hatched egg.
 	const HATCH_LOG_INTERVAL = 10;
@@ -516,6 +524,7 @@
 	const QUEUE_LENGTH_CAP = 5;
 
 	const SAVEID_EGG_SHINY = "breeder-shiny-scum";
+	const SAVEID_HATCH_SHINY = "breeder-hatch-shiny-scum";
 
 	const SETTINGS_SCOPE_SAVE    = {storage: localStorage,   getKey: saveSettingsKey};
 	const SETTINGS_SCOPE_SESSION = {storage: sessionStorage, getKey: () => SSKEY_SETTINGS};
@@ -553,6 +562,8 @@
 	Setting.saveScumShinies = new Setting(SETTINGS_SCOPE_SESSION, "save-scumming-shiny", false);
 	Setting.saveScumStartShinyCount =
 	                          new Setting(SETTINGS_SCOPE_SESSION, "save-scumming-shinies-at-start", 0);
+	Setting.saveScumHatchShiny =
+	                          new Setting(SETTINGS_SCOPE_SESSION, "save-scumming-hatch-shiny", false);
 
 	function getSettings(scope) {
 		const settingsJson = scope.storage.getItem(scope.getKey());
@@ -665,6 +676,23 @@
 		return bestMon;
 	}
 
+	// Try to hatch an egg.
+	// Returns true if an egg was hatched.
+	function hatchEgg() {
+		for (let i = 0; i < 4; ++i) {
+			if (page.hatch(i)) {
+				hatchCount += 1;
+				if (hatchCount % HATCH_LOG_INTERVAL == 0) {
+					console.log(`Auto-hatched ${hatchCount} eggs this session`);
+				}
+
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	/**
 	 * Temporary task to specify types of pokemon to prioritise when breeding.
 	 */
@@ -688,7 +716,7 @@
 	 */
 	function tick() {
 		if(!page.canAccessBreeding()) {
-			setTimeout(tick, DELAY_IDLE);
+			setTimeout(tick, page.gameLoaded? DELAY_IDLE : DELAY_INITIAL);
 			return;
 		}
 
@@ -710,6 +738,26 @@
 			} else if (!page.hasEggItem(true) && !page.hasEggsInSlots()) {
 				syfScripts.saveManager.loadState(SAVEID_EGG_SHINY);
 				console.log("Out of eggs. Reloading...");
+			}
+
+		} else if (Setting.saveScumHatchShiny.get()) {
+			// If we find a new shiny, stop
+			if (page.getShinyCount() > Setting.saveScumStartShinyCount.get()) {
+				console.log("Caught a new shiny!");
+
+				Setting.saveScumHatchShiny.set(false);
+				Setting.saveScumStartShinyCount.set(0);
+				Setting.eggPause.set(true);
+				Setting.hatchPause.set(true);
+
+			// Hatch an egg if there are any left.
+			} else if (hatchEgg()) {
+				setTimeout(tick, DELAY_HATCH);
+				return;
+
+			// Or reload the save if they're all gone without a shiny
+			} else {
+				syfScripts.saveManager.loadState(SAVEID_HATCH_SHINY);
 			}
 		}
 
@@ -751,18 +799,9 @@
 		}
 
 		// Hatch an egg
-		if (!Setting.hatchPause.get()) {
-			for (let i = 0; i < 4; ++i) {
-				if (page.hatch(i)) {
-					hatchCount += 1;
-					if (hatchCount % HATCH_LOG_INTERVAL == 0) {
-						console.log(`Auto-hatched ${hatchCount} eggs this session`);
-					}
-
-					setTimeout(tick, DELAY_HATCH);
-					return;
-				}
-			}
+		if (!Setting.hatchPause.get() && hatchEgg()) {
+			setTimeout(tick, DELAY_HATCH);
+			return;
 		}
 
 		setTimeout(tick, DELAY_IDLE);
@@ -882,15 +921,44 @@
 		}
 	}
 
+	/**
+	 * User facing command.
+	 * Start or stop save scumming to hatch the current eggs as shinies.
+	 *
+	 * @param enable - Truthy to start. Falsey to stop.
+	 */
+	function cmdSetSaveScumHatchShiny(enable=true) {
+		if (enable) {
+			if (!syfScripts || !syfScripts.saveManager) {
+				throw new Error("This functionality requires auto-login 1.2 or higher");
+			}
+
+			syfScripts.saveManager.saveState(SAVEID_HATCH_SHINY);
+		}
+
+		Setting.saveScumHatchShiny.set(!!enable);
+		Setting.saveScumStartShinyCount.set(enable? page.getShinyCount() : 0);
+		Setting.eggPause.set(!!enable);
+		Setting.hatchPause.set(!enable);
+
+		if (enable) {
+			console.log("Starting to save scum hatch for shinies.\n"
+					+ `Run '${WINDOW_KEY}.saveScumHatchShiny(false)' to stop early.`);
+		} else {
+			console.log("Stopped save scumming");
+		}
+	}
+
 	(function main() {
 		setTimeout(tick, DELAY_INITIAL);
 
 		window[WINDOW_KEY] = {
-			type:          cmdPreferType,
-			setEggShinies: cmdSetEggShinies,
-			pauseEggs:     cmdSetEggPause,
-			pauseHatch:    cmdSetHatchPause,
-			saveScumShiny: cmdSetSaveScumShiny,
+			type:               cmdPreferType,
+			setEggShinies:      cmdSetEggShinies,
+			pauseEggs:          cmdSetEggPause,
+			pauseHatch:         cmdSetHatchPause,
+			saveScumShiny:      cmdSetSaveScumShiny,
+			saveScumHatchShiny: cmdSetSaveScumHatchShiny,
 		};
 
 		console.log("Loaded auto-breeder");
