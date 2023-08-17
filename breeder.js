@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PokéClicker - Auto-breeder
 // @namespace    http://tampermonkey.net/
-// @version      1.22
+// @version      1.23
 // @description  Handles breeding eggs automatically
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -45,12 +45,12 @@
 		},
 
 		/**
-		 * Attempt to hatch the given egg in the given slot.
+		 * Test if the given egg is hatchable.
 		 *
-		 * @param eggIdx {number}  - Index of the egg slot to hatch.
-		 * @return                 - Truthy if the egg was hatched successfully, falsey otherwise.
+		 * @param eggIdx {number}  - Index of the egg slot to test.
+		 * @return                 - Truthy if the egg can be hatched, falsey otherwise.
 		 */
-		hatch(eggIdx) {
+		hatchable(eggIdx) {
 			if (!this.canAccessBreeding()) {
 				return false;
 			}
@@ -69,7 +69,21 @@
 				return false;
 			}
 
-			let rtn = breeding.hatchPokemonEgg(eggIdx);
+			return true;
+		},
+
+		/**
+		 * Attempt to hatch the given egg in the given slot.
+		 *
+		 * @param eggIdx {number}  - Index of the egg slot to hatch.
+		 * @return                 - Truthy if the egg was hatched successfully, falsey otherwise.
+		 */
+		hatch(eggIdx) {
+			if (!this.hatchable(eggIdx)) {
+				return false;
+			}
+
+			App.game.breeding.hatchPokemonEgg(eggIdx);
 			return true;
 		},
 
@@ -565,6 +579,10 @@
 	Setting.saveScumHatchShiny =
 	                          new Setting(SETTINGS_SCOPE_SESSION, "save-scumming-hatch-shiny", false);
 
+	// True when in the step phase of the save scum hatch shiny.
+	// That is, waiting for eggs to be ready to hatch.
+	let saveScumHatchShinyStepPhase = false;
+
 	function getSettings(scope) {
 		const settingsJson = scope.storage.getItem(scope.getKey());
 
@@ -693,6 +711,17 @@
 		return false;
 	}
 
+	// Check if all egg slots are hatchable
+	function allSlotsHatchable() {
+		for (let i = 0; i < 4; ++i) {
+			if (!page.hatchable(i)) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
 	/**
 	 * Temporary task to specify types of pokemon to prioritise when breeding.
 	 */
@@ -739,8 +768,23 @@
 				syfScripts.saveManager.loadState(SAVEID_EGG_SHINY);
 				console.log("Out of eggs. Reloading...");
 			}
+		}
 
-		} else if (Setting.saveScumHatchShiny.get()) {
+		// save scum hatch shiny: step-phase - Wait for the eggs to be hatchable
+		if (saveScumHatchShinyStepPhase) {
+			if (allSlotsHatchable()) {
+				// Ready to start main-phase of save-scumming
+				syfScripts.saveManager.saveState(SAVEID_HATCH_SHINY);
+				Setting.saveScumHatchShiny.set(true);
+				saveScumHatchShinyStepPhase = false;
+			} else {
+				// Wait a bit
+				setTimeout(tick, DELAY_IDLE);
+				return;
+			}
+		}
+
+		if (Setting.saveScumHatchShiny.get()) {
 			// If we find a new shiny, stop
 			if (page.getShinyCount() > Setting.saveScumStartShinyCount.get()) {
 				console.log("Caught a new shiny!");
@@ -928,18 +972,18 @@
 	 * @param enable - Truthy to start. Falsey to stop.
 	 */
 	function cmdSetSaveScumHatchShiny(enable=true) {
-		if (enable) {
-			if (!syfScripts || !syfScripts.saveManager) {
-				throw new Error("This functionality requires auto-login 1.2 or higher");
-			}
-
-			syfScripts.saveManager.saveState(SAVEID_HATCH_SHINY);
+		if (enable && (!syfScripts || !syfScripts.saveManager)) {
+			throw new Error("This functionality requires auto-login 1.2 or higher");
 		}
 
-		Setting.saveScumHatchShiny.set(!!enable);
 		Setting.saveScumStartShinyCount.set(enable? page.getShinyCount() : 0);
 		Setting.eggPause.set(!!enable);
 		Setting.hatchPause.set(!enable);
+
+		saveScumHatchShinyStepPhase = !!enable;
+		if (!enable) {
+			Setting.saveScumHatchShiny.set(false);
+		}
 
 		if (enable) {
 			console.log("Starting to save scum hatch for shinies.\n"
