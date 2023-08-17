@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PokéClicker - Auto-breeder
 // @namespace    http://tampermonkey.net/
-// @version      1.19
+// @version      1.20
 // @description  Handles breeding eggs automatically
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -82,6 +82,39 @@
 		 */
 		hasFreeEggSlot() {
 			return this.canBreed() && App.game.breeding.hasFreeEggSlot();
+		},
+
+		/**
+		 * Test if the player has any eggs from egg items in any slots.
+		 *
+		 * @return - Truthy if there is at least one egg in a slot. Falsey if not.
+		 */
+		hasEggsInSlots() {
+			const slots = App.game.breeding.eggList;
+
+			for (let i = 0; i < slots.length; ++i) {
+				const slot = slots[i]();
+
+				switch (slot.type) {
+					case EggType.Fire:
+					case EggType.Water:
+					case EggType.Grass:
+					case EggType.Fighting:
+					case EggType.Electric:
+					case EggType.Dragon:
+					case EggType.Mystery:
+						return true;
+
+					case EggType.Pokemon:
+					case EggType.Fossil:
+						break;
+
+					default:
+						console.warn("Unknown egg type", slot.type);
+				}
+			}
+
+			return false;
 		},
 
 		/**
@@ -433,6 +466,24 @@
 		getSaveKey() {
 			return Save.key;
 		},
+
+		/**
+		 * Count how many shinies the player currently has.
+		 *
+		 * @return {number} - Number of distinct shinies.
+		 */
+		getShinyCount() {
+			const party = App.game.party.caughtPokemon;
+			let count = 0;
+
+			for(let i = 0; i < party.length; ++i) {
+				if (party[i].shiny) {
+					count += 1;
+				}
+			}
+
+			return count;
+		},
 	};
 
 	//////////////////////////
@@ -447,9 +498,6 @@
 	const WINDOW_KEY = "breed";
 	const LSKEY_SETTINGS = "syfschydea--breeder--settings--";
 	const SSKEY_SETTINGS = "syfschydea--breeder--settings";
-
-	const SETTINGS_KEY_EGG_SHINIES = "egg-shinies";
-	const SETTINGS_KEY_EGG_PAUSE = "egg-pause";
 
 	// Delays following certain actions
 	const DELAY_HATCH   =           800;
@@ -467,65 +515,60 @@
 	// The script will not automatically put more than this many pokemon into the breeding queue.
 	const QUEUE_LENGTH_CAP = 5;
 
-	// Fetch settings which are specific to the currently loaded save.
-	function getSaveSettings() {
-		const settingsJson = localStorage.getItem(LSKEY_SETTINGS + page.getSaveKey());
-		if (settingsJson) {
-			return JSON.parse(settingsJson);
-		} else {
+	const SAVEID_EGG_SHINY = "breeder-shiny-scum";
+
+	const SETTINGS_SCOPE_SAVE    = {storage: localStorage,   getKey: saveSettingsKey};
+	const SETTINGS_SCOPE_SESSION = {storage: sessionStorage, getKey: () => SSKEY_SETTINGS};
+
+	/**
+	 * Holds info about a single value which exists in settings.
+	 */
+	class Setting {
+		constructor(scope, key, defaultVal) {
+			this.scope = scope;
+			this.key = key;
+			this.defaultVal = defaultVal;
+		}
+
+		get() {
+			const settings = getSettings(this.scope);
+
+			if (!(this.key in settings)) {
+				return this.defaultVal;
+			}
+
+			return settings[this.key];
+		}
+
+		set(val) {
+			const settings = getSettings(this.scope);
+			settings[this.key] = val;
+			writeSettings(this.scope, settings);
+		}
+	}
+
+	Setting.eggShinies      = new Setting(SETTINGS_SCOPE_SAVE,    "egg-shinies", false);
+	Setting.eggPause        = new Setting(SETTINGS_SCOPE_SESSION, "egg-pause", false);
+	Setting.saveScumShinies = new Setting(SETTINGS_SCOPE_SESSION, "save-scumming-shiny", false);
+	Setting.saveScumStartShinyCount =
+	                          new Setting(SETTINGS_SCOPE_SESSION, "save-scumming-shinies-at-start", 0);
+
+	function getSettings(scope) {
+		const settingsJson = scope.storage.getItem(scope.getKey());
+
+		if (!settingsJson) {
 			return {};
 		}
+
+		return JSON.parse(settingsJson);
 	}
 
-	// Write settings which are specific to the currently loaded save.
-	function writeSaveSettings(newSettings) {
-		localStorage.setItem(LSKEY_SETTINGS + page.getSaveKey(),
-				JSON.stringify(newSettings));
+	function writeSettings(scope, newSettings) {
+		scope.storage.setItem(scope.getKey(), JSON.stringify(newSettings));
 	}
 
-	// Fetch settings which are specific to the current session.
-	function getSessionSettings() {
-		const settingsJson = sessionStorage.getItem(SSKEY_SETTINGS);
-		if (settingsJson) {
-			return JSON.parse(settingsJson);
-		} else {
-			return {};
-		}
-	}
-
-	// Write settings which are specific to the current session.
-	function writeSessionSettings(newSettings) {
-		sessionStorage.setItem(SSKEY_SETTINGS, JSON.stringify(newSettings));
-	}
-
-	// Check if we should keep hatching egg items until all shinies are obtained.
-	// Save-level setting.
-	function getEggShinySetting() {
-		const settings = getSaveSettings();
-		if (SETTINGS_KEY_EGG_SHINIES in settings) {
-			return settings[SETTINGS_KEY_EGG_SHINIES];
-		} else {
-			return false;
-		}
-	}
-
-	// Check if egg item hatching is paused.
-	// Session-level setting.
-	function getEggItemPause() {
-		const settings = getSessionSettings();
-		if (SETTINGS_KEY_EGG_PAUSE in settings) {
-			return settings[SETTINGS_KEY_EGG_PAUSE];
-		} else {
-			return false;
-		}
-	}
-
-	// Set egg item pause.
-	// Session-level setting.
-	function setEggItemPause(val) {
-		const settings = getSessionSettings();
-		settings[SETTINGS_KEY_EGG_PAUSE] = val;
-		writeSessionSettings(settings);
+	function saveSettingsKey() {
+		return LSKEY_SETTINGS + page.getSaveKey();
 	}
 
 	/**
@@ -654,8 +697,23 @@
 		}
 
 		let canBreed = page.canBreed();
-		const eggPause = getEggItemPause();
-		const eggShinies = !eggPause && getEggShinySetting();
+
+		if (Setting.saveScumShinies.get()) {
+			if (page.getShinyCount() > Setting.saveScumStartShinyCount.get()) {
+				console.log("Caught a new shiny!");
+
+				Setting.saveScumShinies.set(false);
+				Setting.saveScumStartShinyCount.set(0);
+				Setting.eggPause.set(true);
+
+			} else if (!page.hasEggItem(true) && !page.hasEggsInSlots()) {
+				syfScripts.saveManager.loadState(SAVEID_EGG_SHINY);
+				console.log("Out of eggs. Reloading...");
+			}
+		}
+
+		const eggPause = Setting.eggPause.get();
+		const eggShinies = !eggPause && Setting.eggShinies.get();
 
 		if (page.hasFossil() || (!eggPause && page.hasEggItem(eggShinies))) {
 			let hasFreeEggSlot = page.hasFreeEggSlot();
@@ -758,9 +816,7 @@
 	 * @param enable - Truthy to hatch mystery eggs for shinies. Falsey to only aim to hatch non-shinies.
 	 */
 	function cmdSetEggShinies(enable) {
-		const settings = getSaveSettings();
-		settings[SETTINGS_KEY_EGG_SHINIES] = !!enable;
-		writeSaveSettings(settings);
+		Setting.eggShinies.set(!!enable);
 
 		console.log("Hatching eggs to catch " + (enable? "shinies" : "unique species"));
 	}
@@ -772,10 +828,42 @@
 	 * @param pause - Truthy to temporarily stop hatching egg items. Falsey to resume.
 	 */
 	function cmdSetEggPause(pause=true) {
-		setEggItemPause(!!pause);
+		Setting.eggPause.set(!!pause);
 
 		console.log((pause? "Paused" : "Resumed") + " hatching egg items."
 				+ (pause? `\nRun '${WINDOW_KEY}.pauseEggs(false)' to resume.` : ""));
+	}
+
+	/**
+	 * User facing command.
+	 * Start or stop save scumming for a shiny egg hatch.
+	 *
+	 * @param enable - Truthy to start. Falsey to stop.
+	 */
+	function cmdSetSaveScumShiny(enable=true) {
+		if (enable) {
+			if (!syfScripts || !syfScripts.saveManager) {
+				throw new Error("This functionality requires auto-login 1.2 or higher");
+			}
+
+			if (!page.hasEggItem(true)) {
+				throw new Error("Must have at least one egg to hatch before starting");
+			}
+
+			syfScripts.saveManager.saveState(SAVEID_EGG_SHINY);
+			Setting.eggShinies.set(true);
+		}
+
+		Setting.saveScumShinies.set(!!enable);
+		Setting.saveScumStartShinyCount.set(enable? page.getShinyCount() : 0);
+		Setting.eggPause.set(!enable);
+
+		if (enable) {
+			console.log("Starting to save scum for shinies.\n"
+					+ `Run '${WINDOW_KEY}.saveScumShiny(false)' to stop early.`);
+		} else {
+			console.log("Stopped save scumming");
+		}
 	}
 
 	(function main() {
@@ -785,8 +873,12 @@
 			type:          cmdPreferType,
 			setEggShinies: cmdSetEggShinies,
 			pauseEggs:     cmdSetEggPause,
+			saveScumShiny: cmdSetSaveScumShiny,
 		};
 
 		console.log("Loaded auto-breeder");
+		if (Setting.saveScumShinies.get()) {
+			console.log("Resuming shiny save scumming");
+		}
 	})();
 })();
