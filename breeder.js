@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PokéClicker - Auto-breeder
 // @namespace    http://tampermonkey.net/
-// @version      1.23
+// @version      1.24
 // @description  Handles breeding eggs automatically
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -107,6 +107,47 @@
 		},
 
 		/**
+		 * Check if the given slot contains an egg which comes from an egg item.
+		 *
+		 * @param slotIdx {number} - Index of the slot to check.
+		 * @return                 - Truthy if the egg in that slot came from an egg.
+		 *                           Falsey if not, including if there is no egg in that slot.
+		 */
+		slotIsFromEggItem(slotIdx) {
+			const slot = App.game.breeding.eggList[slotIdx]();
+			switch (slot.type) {
+				case EggType.Fire:
+				case EggType.Water:
+				case EggType.Grass:
+				case EggType.Fighting:
+				case EggType.Electric:
+				case EggType.Dragon:
+				case EggType.Mystery:
+					return true;
+
+				case EggType.None:
+				case EggType.Pokemon:
+				case EggType.Fossil:
+					return false;
+
+				default:
+					console.warn("Unknown egg type", slot.type);
+					return false;
+			}
+		},
+
+		/**
+		 * Fetch the dex ID of the pokemon in the given egg slot.
+		 * Undefined behaviour if called on an empty slot.
+		 *
+		 * @param slotIdx {number} - Index of the slot to check.
+		 * @return        {number} - Pokedex id of the pokemon in this slot.
+		 */
+		getSlotDexId(slotIdx) {
+			return App.game.breeding.eggList[slotIdx]().pokemon;
+		},
+
+		/**
 		 * Test if the player has any eggs from egg items in any slots.
 		 *
 		 * @return - Truthy if there is at least one egg in a slot. Falsey if not.
@@ -115,24 +156,8 @@
 			const slots = App.game.breeding.eggList;
 
 			for (let i = 0; i < slots.length; ++i) {
-				const slot = slots[i]();
-
-				switch (slot.type) {
-					case EggType.Fire:
-					case EggType.Water:
-					case EggType.Grass:
-					case EggType.Fighting:
-					case EggType.Electric:
-					case EggType.Dragon:
-					case EggType.Mystery:
-						return true;
-
-					case EggType.Pokemon:
-					case EggType.Fossil:
-						break;
-
-					default:
-						console.warn("Unknown egg type", slot.type);
+				if (this.slotIsFromEggItem(i)) {
+					return true;
 				}
 			}
 
@@ -335,6 +360,7 @@
 		/**
 		 * Not required by page interface.
 		 * Check if the player has visited the required region to hatch the given fossil.
+
 		 *
 		 * @param fossil {Object}  - Fossil object from player.mineInventory()
 		 * @return       {boolean} - True if the player has unlocked the fossil, false otherwise.
@@ -421,6 +447,16 @@
 			}
 
 			return mon.id;
+		},
+
+		/**
+		 * Check if the player has caught the given species.
+		 *
+		 * @param dexId {number} - Pokedex id of the species to look up.
+		 * @return               - Truthy if the player has that species, falsey if not.
+		 */
+		hasSpecies(dexId) {
+			return App.game.party.alreadyCaughtPokemon(dexId, false);
 		},
 
 		/**
@@ -539,6 +575,7 @@
 
 	const SAVEID_EGG_SHINY = "breeder-shiny-scum";
 	const SAVEID_HATCH_SHINY = "breeder-hatch-shiny-scum";
+	const SAVEID_INCUBATE_EGG = "breeder-incubate-egg";
 
 	const SETTINGS_SCOPE_SAVE    = {storage: localStorage,   getKey: saveSettingsKey};
 	const SETTINGS_SCOPE_SESSION = {storage: sessionStorage, getKey: () => SSKEY_SETTINGS};
@@ -576,12 +613,19 @@
 	Setting.saveScumShinies = new Setting(SETTINGS_SCOPE_SESSION, "save-scumming-shiny", false);
 	Setting.saveScumStartShinyCount =
 	                          new Setting(SETTINGS_SCOPE_SESSION, "save-scumming-shinies-at-start", 0);
-	Setting.saveScumHatchShiny =
-	                          new Setting(SETTINGS_SCOPE_SESSION, "save-scumming-hatch-shiny", false);
+
+	// True when attempting to save-scum incubating an egg in order to get a species/shiny we don't have yet
+	Setting.saveScumIncubateEgg =
+	                          new Setting(SETTINGS_SCOPE_SESSION, "save-scumming-incubate-egg", false);
 
 	// True when in the step phase of the save scum hatch shiny.
 	// That is, waiting for eggs to be ready to hatch.
-	let saveScumHatchShinyStepPhase = false;
+	Setting.saveScumHatchShinyStepPhase =
+	                          new Setting(SETTINGS_SCOPE_SESSION, "save-scumming-hatch-shiny-step-phase", false);
+	
+	// True when actively hatching ready-to-hatch eggs until one of them is shiny
+	Setting.saveScumHatchShiny =
+	                          new Setting(SETTINGS_SCOPE_SESSION, "save-scumming-hatch-shiny", false);
 
 	function getSettings(scope) {
 		const settingsJson = scope.storage.getItem(scope.getKey());
@@ -770,13 +814,39 @@
 			}
 		}
 
+		const eggShinies = Setting.eggShinies.get();
+
+		// Save scum incubating eggs
+		if (Setting.saveScumIncubateEgg.get()) {
+			if (saveScumIncubateHasBadEggs(eggShinies)) {
+				syfScripts.saveManager.loadState(SAVEID_INCUBATE_EGG);
+				return;
+
+			} else if (!page.hasEggItem(eggShinies) || !page.hasFreeEggSlot()) {
+				Setting.saveScumIncubateEgg.set(false);
+				Setting.saveScumHatchShinyStepPhase.set(eggShinies);
+				console.log("Done grinding for eggs." + (eggShinies? "\nWaiting for them to be ready to hatch." : ""));
+
+			} else {
+				syfScripts.saveManager.saveState(SAVEID_INCUBATE_EGG);
+				page.useEggItemIfPresent(eggShinies);
+
+				setTimeout(tick, DELAY_BREED);
+				return;
+			}
+		}
+
 		// save scum hatch shiny: step-phase - Wait for the eggs to be hatchable
-		if (saveScumHatchShinyStepPhase) {
+		if (Setting.saveScumHatchShinyStepPhase.get()) {
 			if (allSlotsHatchable()) {
 				// Ready to start main-phase of save-scumming
 				syfScripts.saveManager.saveState(SAVEID_HATCH_SHINY);
+				Setting.saveScumStartShinyCount.set(page.getShinyCount());
 				Setting.saveScumHatchShiny.set(true);
-				saveScumHatchShinyStepPhase = false;
+				Setting.saveScumHatchShinyStepPhase.set(false);
+
+				console.log("Eggs are ready to hatch!");
+
 			} else {
 				// Wait a bit
 				setTimeout(tick, DELAY_IDLE);
@@ -806,7 +876,6 @@
 		}
 
 		const eggPause = Setting.eggPause.get();
-		const eggShinies = !eggPause && Setting.eggShinies.get();
 
 		if (page.hasFossil() || (!eggPause && page.hasEggItem(eggShinies))) {
 			let hasFreeEggSlot = page.hasFreeEggSlot();
@@ -933,6 +1002,12 @@
 				+ (pause? `\nRun '${WINDOW_KEY}.pauseHatch(false)' to resume.` : ""));
 	}
 
+	function verifySaveManagerLoaded() {
+		if (!syfScripts || !syfScripts.saveManager) {
+			throw new Error("This functionality requires auto-login 1.2 or higher");
+		}
+	}
+
 	/**
 	 * User facing command.
 	 * Start or stop save scumming for a shiny egg hatch.
@@ -941,9 +1016,7 @@
 	 */
 	function cmdSetSaveScumShiny(enable=true) {
 		if (enable) {
-			if (!syfScripts || !syfScripts.saveManager) {
-				throw new Error("This functionality requires auto-login 1.2 or higher");
-			}
+			verifySaveManagerLoaded();
 
 			if (!page.hasEggItem(true)) {
 				throw new Error("Must have at least one egg to hatch before starting");
@@ -972,15 +1045,14 @@
 	 * @param enable - Truthy to start. Falsey to stop.
 	 */
 	function cmdSetSaveScumHatchShiny(enable=true) {
-		if (enable && (!syfScripts || !syfScripts.saveManager)) {
-			throw new Error("This functionality requires auto-login 1.2 or higher");
+		if (enable) {
+			verifySaveManagerLoaded();
 		}
 
-		Setting.saveScumStartShinyCount.set(enable? page.getShinyCount() : 0);
 		Setting.eggPause.set(!!enable);
 		Setting.hatchPause.set(!enable);
 
-		saveScumHatchShinyStepPhase = !!enable;
+		Setting.saveScumHatchShinyStepPhase.set(!!enable);
 		if (!enable) {
 			Setting.saveScumHatchShiny.set(false);
 		}
@@ -993,16 +1065,87 @@
 		}
 	}
 
+	/**
+	 * Check if any eggs in the hatchery are duplicate species from an egg item.
+	 * Used by the save scum incubate system to determine if we got bad RNG from the incubation.
+	 */
+	function saveScumIncubateHasBadEggs(eggShinies=Setting.eggShinies.get()) {
+		for (let i = 0; i < 4; ++i) {
+			if (!page.slotIsFromEggItem(i)) {
+				continue;
+			}
+
+			// If we already have this species/shiny:
+			const dexId = page.getSlotDexId(i);
+			if (eggShinies? page.hasShiny(dexId) : page.hasSpecies(dexId)) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * User facing command.
+	 * Start of stop save scumming for a desirable species from an egg.
+	 *
+	 * @param enable - Truthy to start. Falsey to stop.
+	 */
+	function cmdSetSaveScumIncubateEgg(enable=true) {
+		const eggShinies = Setting.eggShinies.get();
+
+		if (enable) {
+			verifySaveManagerLoaded();
+
+			if (!page.hasEggItem(eggShinies)) {
+				throw new Error("Didn't find any eggs to incubate");
+			}
+
+			if (!page.hasFreeEggSlot()) {
+				throw new Error("Need at least one free egg slot");
+			}
+
+			if (saveScumIncubateHasBadEggs(eggShinies)) {
+				throw new Error("Can't start while there are already undesirable eggs in the hatchery");
+			}
+
+			// Check that we're still on Kanto
+			if (page.getHighestRegion() > 0) {
+				// In Kanto, each pokemon that can come out of a mystery egg has a distinct egg pattern/colouration.
+				// But starting in Johto there are pairs of pokemon which come from eggs, and share egg patterns,
+				// so this system's method of just grabbing the dex id would be cheaty.
+				// So until I find a way to only use the egg image data and step count to determine which eggs we want,
+				// I should keep this restricted to Kanto only
+				throw new Error("This feature is only enabled in Kanto. See the comment by this error for more info");
+			}
+		}
+
+		Setting.saveScumIncubateEgg.set(!!enable);
+
+		// This save shouldn't get used, but just as a fallback to avoid
+		// loading a REALLY old save if something goes wrong
+		syfScripts.saveManager.saveState(SAVEID_INCUBATE_EGG);
+
+		if (enable) {
+			console.log("Starting to save scum for unique "
+					+ (Setting.eggShinies.get()? "shinies" : "species") + " from eggs.\n"
+					+ `Run '${WINDOW_KEY}.saveScumIncubateEgg(false)' to stop early.`);
+		} else {
+			console.log("Stopped save scumming");
+		}
+	}
+
 	(function main() {
 		setTimeout(tick, DELAY_INITIAL);
 
 		window[WINDOW_KEY] = {
-			type:               cmdPreferType,
-			setEggShinies:      cmdSetEggShinies,
-			pauseEggs:          cmdSetEggPause,
-			pauseHatch:         cmdSetHatchPause,
-			saveScumShiny:      cmdSetSaveScumShiny,
-			saveScumHatchShiny: cmdSetSaveScumHatchShiny,
+			type:                cmdPreferType,
+			setEggShinies:       cmdSetEggShinies,
+			pauseEggs:           cmdSetEggPause,
+			pauseHatch:          cmdSetHatchPause,
+			saveScumShiny:       cmdSetSaveScumShiny,
+			saveScumHatchShiny:  cmdSetSaveScumHatchShiny,
+			saveScumIncubateEgg: cmdSetSaveScumIncubateEgg,
 		};
 
 		console.log("Loaded auto-breeder");
