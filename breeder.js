@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PokéClicker - Auto-breeder
 // @namespace    http://tampermonkey.net/
-// @version      1.24.1
+// @version      1.24.2
 // @description  Handles breeding eggs automatically
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -134,6 +134,16 @@
 					console.warn("Unknown egg type", slot.type);
 					return false;
 			}
+		},
+
+		/**
+		 * Test if a slot has no egg in it.
+		 *
+		 * @param slotIdx {number} - Index of the slot to check.
+		 * @return                 - Truthy if empty. Falsey if there is an egg/fossil in it.
+		 */
+		slotIsEmpty(slotIdx) {
+			return App.game.breeding.eggList[slotIdx]().isNone();
 		},
 
 		/**
@@ -756,10 +766,10 @@
 		return false;
 	}
 
-	// Check if all egg slots are hatchable
+	// Check if all non-empty egg slots are hatchable
 	function allSlotsHatchable() {
 		for (let i = 0; i < 4; ++i) {
-			if (!page.hatchable(i)) {
+			if (!page.slotIsEmpty(i) && !page.hatchable(i)) {
 				return false;
 			}
 		}
