@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PokéClicker - Auto-breeder
 // @namespace    http://tampermonkey.net/
-// @version      1.24
+// @version      1.24.1
 // @description  Handles breeding eggs automatically
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -558,10 +558,11 @@
 	const SSKEY_SETTINGS = "syfschydea--breeder--settings";
 
 	// Delays following certain actions
-	const DELAY_HATCH   =           800;
-	const DELAY_BREED   =           800;
-	const DELAY_IDLE    =     30 * 1000;
-	const DELAY_INITIAL =      5 * 1000;
+	const DELAY_HATCH    =       800;
+	const DELAY_BREED    =       800;
+	const DELAY_IDLE     = 30 * 1000;
+	const DELAY_INITIAL  =  5 * 1000;
+	const DELAY_USER_CMD =       800;
 
 	// How often to report hatched eggs. Report every nth hatched egg.
 	const HATCH_LOG_INTERVAL = 10;
@@ -782,6 +783,15 @@
 
 	let currentTask = null;
 	let hatchCount = 0;
+	let tickTimeoutId = null;
+
+	function scheduleTick(delay) {
+		if (tickTimeoutId != null) {
+			clearTimeout(tickTimeoutId);
+		}
+
+		tickTimeoutId = setTimeout(tick, delay);
+	}
 
 	/**
 	 * Update the breeding system to perform any actions which need doing.
@@ -789,8 +799,7 @@
 	 */
 	function tick() {
 		if(!page.canAccessBreeding()) {
-			setTimeout(tick, page.gameLoaded? DELAY_IDLE : DELAY_INITIAL);
-			return;
+			return scheduleTick(page.gameLoaded? DELAY_IDLE : DELAY_INITIAL);
 		}
 
 		if (currentTask && currentTask.hasExpired()) {
@@ -831,8 +840,7 @@
 				syfScripts.saveManager.saveState(SAVEID_INCUBATE_EGG);
 				page.useEggItemIfPresent(eggShinies);
 
-				setTimeout(tick, DELAY_BREED);
-				return;
+				return scheduleTick(DELAY_BREED);
 			}
 		}
 
@@ -849,8 +857,7 @@
 
 			} else {
 				// Wait a bit
-				setTimeout(tick, DELAY_IDLE);
-				return;
+				return scheduleTick(DELAY_IDLE);
 			}
 		}
 
@@ -866,8 +873,7 @@
 
 			// Hatch an egg if there are any left.
 			} else if (hatchEgg()) {
-				setTimeout(tick, DELAY_HATCH);
-				return;
+				return scheduleTick(DELAY_HATCH);
 
 			// Or reload the save if they're all gone without a shiny
 			} else {
@@ -885,15 +891,14 @@
 				if(!page.useFossilIfPresent() && !eggPause) {
 					page.useEggItemIfPresent(eggShinies);
 				}
-				setTimeout(tick, DELAY_BREED);
-				return;
+
+				return scheduleTick(DELAY_BREED);
 			}
 
 			// Clear the queue to make room for a fossil/egg
 			if (!hasFreeEggSlot && page.hasPokemonInQueue()) {
 				page.removeFromQueue();
-				setTimeout(tick, DELAY_HATCH);
-				return;
+				return scheduleTick(DELAY_HATCH);
 			}
 
 		// Starting breeding/queueing a new mon
@@ -906,18 +911,16 @@
 			const bestMonId = getBreedableMon(Array.from(preferredTypes));
 			if (bestMonId != null) {
 				page.breed(bestMonId);
-				setTimeout(tick, DELAY_BREED);
-				return;
+				return scheduleTick(DELAY_BREED);
 			}
 		}
 
 		// Hatch an egg
 		if (!Setting.hatchPause.get() && hatchEgg()) {
-			setTimeout(tick, DELAY_HATCH);
-			return;
+			return scheduleTick(DELAY_HATCH);
 		}
 
-		setTimeout(tick, DELAY_IDLE);
+		scheduleTick(DELAY_IDLE);
 	}
 
 	/**
@@ -1036,6 +1039,8 @@
 		} else {
 			console.log("Stopped save scumming");
 		}
+
+		scheduleTick(DELAY_USER_CMD);
 	}
 
 	/**
@@ -1063,6 +1068,8 @@
 		} else {
 			console.log("Stopped save scumming");
 		}
+
+		scheduleTick(DELAY_USER_CMD);
 	}
 
 	/**
@@ -1126,6 +1133,8 @@
 		// loading a REALLY old save if something goes wrong
 		syfScripts.saveManager.saveState(SAVEID_INCUBATE_EGG);
 
+		scheduleTick(DELAY_USER_CMD);
+
 		if (enable) {
 			console.log("Starting to save scum for unique "
 					+ (Setting.eggShinies.get()? "shinies" : "species") + " from eggs.\n"
@@ -1136,7 +1145,7 @@
 	}
 
 	(function main() {
-		setTimeout(tick, DELAY_INITIAL);
+		scheduleTick(DELAY_INITIAL);
 
 		window[WINDOW_KEY] = {
 			type:                cmdPreferType,
