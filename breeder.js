@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PokéClicker - Auto-breeder
 // @namespace    http://tampermonkey.net/
-// @version      1.24.2
+// @version      1.25.1
 // @description  Handles breeding eggs automatically
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -619,8 +619,14 @@
 	}
 
 	Setting.eggShinies      = new Setting(SETTINGS_SCOPE_SAVE,    "egg-shinies", false);
+
+	// True if we should breed non-shinies for the chance of a shiny.
+	// Disallowed in ACSRQ with some exceptions.
+	Setting.shinyBreeding   = new Setting(SETTINGS_SCOPE_SAVE,    "shiny-breeding", true);
+
+	Setting.hatchPause      = new Setting(SETTINGS_SCOPE_SAVE,    "hatch-pause", false);
+
 	Setting.eggPause        = new Setting(SETTINGS_SCOPE_SESSION, "egg-pause", false);
-	Setting.hatchPause      = new Setting(SETTINGS_SCOPE_SESSION, "hatch-pause", false);
 	Setting.saveScumShinies = new Setting(SETTINGS_SCOPE_SESSION, "save-scumming-shiny", false);
 	Setting.saveScumStartShinyCount =
 	                          new Setting(SETTINGS_SCOPE_SESSION, "save-scumming-shinies-at-start", 0);
@@ -709,8 +715,11 @@
 			return parentMonId;
 		}
 
+		const shinyBreeding = Setting.shinyBreeding.get();
+
 		const maxScore = preferredTypes.length * WEIGHT_PREFERRED_TYPE
-				+ WEIGHT_NOT_SHINY + WEIGHT_CURRENT_REGION;
+				+ (shinyBreeding? WEIGHT_CURRENT_REGION : 0)
+				+ WEIGHT_NOT_SHINY;
 
 		let bestMon = null;
 		let bestScore = -1;
@@ -723,7 +732,11 @@
 			let score = 0;
 
 			if (!page.hasShiny(id)) {
-				score += WEIGHT_NOT_SHINY;
+				if (shinyBreeding) {
+					score += WEIGHT_NOT_SHINY;
+				} else {
+					continue;
+				}
 			}
 
 			for (let type of preferredTypes) {
@@ -1154,12 +1167,22 @@
 		}
 	}
 
+	/**
+	 * Enable or disable breeding of non-shinies for the chance of getting the shiny.
+	 *
+	 * @param enable - Truthy to enable. Falsey to disable.
+	 */
+	function cmdShinyBreeding(enable=true) {
+		Setting.shinyBreeding.set(!!enable);
+	}
+
 	(function main() {
 		scheduleTick(DELAY_INITIAL);
 
 		window[WINDOW_KEY] = {
 			type:                cmdPreferType,
 			setEggShinies:       cmdSetEggShinies,
+			shinyBreeding:       cmdShinyBreeding,
 			pauseEggs:           cmdSetEggPause,
 			pauseHatch:          cmdSetHatchPause,
 			saveScumShiny:       cmdSetSaveScumShiny,
