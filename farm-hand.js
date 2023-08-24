@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.25
+// @version      1.26
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -788,14 +788,15 @@
 	const DESIRED_BERRY_AMOUNT = 1000;
 
 	// Task priorities. Higher is more important
-	const PRIORITY_USER        = 10; // Anything initiated by the user.
-	const PRIORITY_PLOT_UNLOCK =  6;
-	const PRIORITY_BERRY_QUEST =  5;
-	const PRIORITY_POINT_QUEST =  4;
-	const PRIORITY_MUTATION    =  3; // Farming to unlock new types of berries
-	const PRIORITY_AMOUNT      =  2; // Farming to get more of already unlocked berries
-	const PRIORITY_CLEAN_UP    =  1;
-	const PRIORITY_NOTHING     =  0;
+	const PRIORITY_USER                   = 10; // Anything initiated by the user.
+	const PRIORITY_PLOT_UNLOCK            =  7;
+	const PRIORITY_PLOT_UNLOCK_FARM_BERRY =  6;
+	const PRIORITY_BERRY_QUEST            =  5;
+	const PRIORITY_POINT_QUEST            =  4;
+	const PRIORITY_MUTATION               =  3; // Farming to unlock new types of berries
+	const PRIORITY_AMOUNT                 =  2; // Farming to get more of already unlocked berries
+	const PRIORITY_CLEAN_UP               =  1;
+	const PRIORITY_NOTHING                =  0;
 
 	// Max maturation time in seconds to allow for a berry chosen to farm during a Farm Point quest
 	const POINT_QUEST_MAX_MATURATION = 15 * 60;
@@ -1152,8 +1153,32 @@
 			}
 		}
 
+		getRequiredAmount() {
+			return DESIRED_BERRY_AMOUNT;
+		}
+
 		hasExpired(unusedNow) {
-			return page.getBerryAmount(this.targetBerry) >= DESIRED_BERRY_AMOUNT;
+			return page.getBerryAmount(this.targetBerry) >= this.getRequiredAmount();
+		}
+	}
+
+	// Farming Task to get enough of a berry to unlock a slot
+	class FarmForPlotUnlockTask extends FarmAmountTask {
+		priority = PRIORITY_PLOT_UNLOCK_FARM_BERRY;
+
+		constructor(plotIdx) {
+			const req = page.getPlotUnlockCost(plotIdx);
+			super(req.berry);
+			this.plotIdx = plotIdx;
+			this.plotBerryCostAmount = req.amount;
+		}
+
+		getRequiredAmount() {
+			return this.plotBerryCostAmount + PAGE_PLOT_COUNT;
+		}
+
+		expire() {
+			return makePlotUnlockTask(this.plotIdx);
 		}
 	}
 
@@ -1831,16 +1856,23 @@
 	function autoStartTasks() {
 		let priority = currentTask? currentTask.priority : PRIORITY_NOTHING;
 
-		if (priority < PRIORITY_PLOT_UNLOCK && !page.allPlotsUnlocked()) {
+		if (priority < Math.min(PRIORITY_PLOT_UNLOCK, PRIORITY_PLOT_UNLOCK_FARM_BERRY)
+				&& !page.allPlotsUnlocked()) {
 			for (let i = 0; i < PAGE_PLOT_COUNT; ++i) {
 				if (page.plotUnlocked(i)) {
 					continue;
 				}
 
 				const req = page.getPlotUnlockCost(i);
-				if (page.getBerryAmount(req.berry) >= req.amount + 1) {
+				const berryOwnedAmt = page.getBerryAmount(req.berry);
+				if (berryOwnedAmt >= req.amount + 1) {
 					console.log("Unlocking plot", i);
 					currentTask = makePlotUnlockTask(i);
+					priority = currentTask.priority;
+					break;
+				} else if (berryOwnedAmt > 0) {
+					console.log("Farming", req.berry, "to unlock plot", i);
+					currentTask = new FarmForPlotUnlockTask(i);
 					priority = currentTask.priority;
 					break;
 				}
