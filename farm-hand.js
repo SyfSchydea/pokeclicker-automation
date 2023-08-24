@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.24.2
+// @version      1.25
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -717,6 +717,50 @@
 				parentBerry: this._lookupBerry(Object.keys(mutation.berryReqs)[0]),
 			};
 		},
+
+		/**
+		 * Check if the player has unlocked all plots in the farm.
+		 *
+		 * @return - Truthy if all plots are unlocked. Falsey if not.
+		 */
+		allPlotsUnlocked() {
+			return this._getFarmingModule().unlockedPlotCount() >= PAGE_PLOT_COUNT;
+		},
+
+		/**
+		 * Check if the player has unlocked the given plot.
+		 *
+		 * @param plotIdx {number} - Index of the plot to check.
+		 * @return                 - Truthy if the plot is unlocked. Falsey if not.
+		 */
+		plotUnlocked(plotIdx) {
+			return this._getFarmingModule().plotList[plotIdx].isUnlocked;
+		},
+
+		/**
+		 * Check what the unlock requirement for the given plot is.
+		 *
+		 * @param plotIdx {number}                          - Index of the plot to check.
+		 * @return        {{berry: string, amount: number}} - Object containing the name and amount of
+		 *                                                    the berry needed to unlock the plot.
+		 */
+		getPlotUnlockCost(plotIdx) {
+			const req = this._getFarmingModule().plotBerryCost(plotIdx);
+
+			return {
+				berry: this._lookupBerry(req.type),
+				amount: req.amount,
+			};
+		},
+
+		/**
+		 * Attempt to unlock the given plot.
+		 *
+		 * @param plotIdx {number} - Index of the plot to unlock.
+		 */
+		unlockPlot(plotIdx) {
+			this._getFarmingModule().unlockPlot(plotIdx);
+		},
 	};
 
 	//////////////////////////
@@ -745,6 +789,7 @@
 
 	// Task priorities. Higher is more important
 	const PRIORITY_USER        = 10; // Anything initiated by the user.
+	const PRIORITY_PLOT_UNLOCK =  6;
 	const PRIORITY_BERRY_QUEST =  5;
 	const PRIORITY_POINT_QUEST =  4;
 	const PRIORITY_MUTATION    =  3; // Farming to unlock new types of berries
@@ -1296,6 +1341,59 @@
 		}
 	}
 
+	class GenericTask {
+		constructor(priority, expirationPolicy, actionPolicy) {
+			this.priority = priority;
+			this.expirationPolicy = expirationPolicy;
+			this.actionPolicy = actionPolicy;
+		}
+
+		hasExpired() {
+			return this.expirationPolicy.hasExpired();
+		}
+
+		performAction() {
+			return this.actionPolicy.performAction();
+		}
+
+		expire() {
+			return this.actionPolicy.afterExpiration?.();
+		}
+	}
+
+	class PlotUnlockExpiration {
+		constructor(plotIdx) {
+			this.plotIdx = plotIdx;
+		}
+
+		hasExpired() {
+			if (page.plotUnlocked(this.plotIdx)) {
+				return true;
+			}
+
+			// Also expire if we don't have enough berries to buy it
+			const req = page.getPlotUnlockCost(this.plotIdx);
+			return page.getBerryAmount(req.berry) < req.amount;
+		}
+	}
+
+	class PlotUnlockAction {
+		constructor(plotIdx) {
+			this.plotIdx = plotIdx;
+		}
+
+		performAction() {
+			page.unlockPlot(this.plotIdx);
+			return DELAY_HARVEST;
+		}
+	}
+
+	function makePlotUnlockTask(plotIdx) {
+		return new GenericTask(PRIORITY_PLOT_UNLOCK,
+				new PlotUnlockExpiration(plotIdx),
+				new PlotUnlockAction(plotIdx));
+	}
+
 	/**
 	 * Manages information about a berry in its role as a parent to a mutated berry.
 	 */
@@ -1732,6 +1830,22 @@
 	 */
 	function autoStartTasks() {
 		let priority = currentTask? currentTask.priority : PRIORITY_NOTHING;
+
+		if (priority < PRIORITY_PLOT_UNLOCK && !page.allPlotsUnlocked()) {
+			for (let i = 0; i < PAGE_PLOT_COUNT; ++i) {
+				if (page.plotUnlocked(i)) {
+					continue;
+				}
+
+				const req = page.getPlotUnlockCost(i);
+				if (page.getBerryAmount(req.berry) >= req.amount + 1) {
+					console.log("Unlocking plot", i);
+					currentTask = makePlotUnlockTask(i);
+					priority = currentTask.priority;
+					break;
+				}
+			}
+		}
 
 		if (priority < PRIORITY_BERRY_QUEST && page.getQuestBerry()) {
 			console.log("Farming for Berry quest");
