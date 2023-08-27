@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Digger
 // @namespace    http://tampermonkey.net/
-// @version      1.5.2+energy-management-1
+// @version      1.5.2+energy-management-2
 // @description  Automates digging underground in Pokéclicker.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -158,7 +158,7 @@
 		 */
 		getEnergy() {
 			return App.game.underground.energy;
-		}
+		},
 
 		/**
 		 * Fetch the player's current energy cap.
@@ -167,7 +167,7 @@
 		 */
 		getMaxEnergy() {
 			return App.game.underground.getMaxEnergy();
-		}
+		},
 
 		/**
 		 * Check if the player can afford a bomb use.
