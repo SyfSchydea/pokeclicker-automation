@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Digger
 // @namespace    http://tampermonkey.net/
-// @version      1.5.2
+// @version      1.5.2+energy-management-1
 // @description  Automates digging underground in Pokéclicker.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -150,6 +150,24 @@
 		isLayerCompleted() {
 			return Mine.loadingNewLayer;
 		},
+
+		/**
+		 * Fetch the amount of energy the player currently has available.
+		 *
+		 * @return {number} - Amounnt of energy.
+		 */
+		getEnergy() {
+			return App.game.underground.energy;
+		}
+
+		/**
+		 * Fetch the player's current energy cap.
+		 *
+		 * @return {number} - Max energy value.
+		 */
+		getMaxEnergy() {
+			return App.game.underground.getMaxEnergy();
+		}
 
 		/**
 		 * Check if the player can afford a bomb use.
@@ -345,13 +363,13 @@
 
 	const WINDOW_KEY = "diggy";
 
-	const DELAY_BOMB      =           1000;
-	const DELAY_CHISEL    =            200;
-	const DELAY_SURVEY    =           1000;
-	const DELAY_IDLE      = 10 * 60 * 1000;
-	const DELAY_NEW_LAYER =       5 * 1000;
-	const DELAY_INIT      =           1000;
-	const DELAY_NO_TASK   =      60 * 1000;
+	const DELAY_BOMB      =      1000;
+	const DELAY_CHISEL    =       200;
+	const DELAY_SURVEY    =      1000;
+	const DELAY_IDLE      = 60 * 1000;
+	const DELAY_NEW_LAYER =  5 * 1000;
+	const DELAY_INIT      =      1000;
+	const DELAY_NO_TASK   = 60 * 1000;
 
 	const TARGET_DIAMOND_VALUE = 1000;
 
@@ -456,6 +474,10 @@
 		action() {
 			if (page.isLayerCompleted()) {
 				return DELAY_NEW_LAYER;
+			}
+
+			if (page.getEnergy() / page.getMaxEnergy() < 0.75) {
+				return DELAY_IDLE;
 			}
 
 			if (page.hasLocatedAllRewards()) {
