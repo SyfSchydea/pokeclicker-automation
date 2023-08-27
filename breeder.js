@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PokéClicker - Auto-breeder
 // @namespace    http://tampermonkey.net/
-// @version      1.25.1
+// @version      1.25.2
 // @description  Handles breeding eggs automatically
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -626,7 +626,7 @@
 
 	Setting.hatchPause      = new Setting(SETTINGS_SCOPE_SAVE,    "hatch-pause", false);
 
-	Setting.eggPause        = new Setting(SETTINGS_SCOPE_SESSION, "egg-pause", false);
+	Setting.eggPause        = new Setting(SETTINGS_SCOPE_SAVE,    "egg-pause", false);
 	Setting.saveScumShinies = new Setting(SETTINGS_SCOPE_SESSION, "save-scumming-shiny", false);
 	Setting.saveScumStartShinyCount =
 	                          new Setting(SETTINGS_SCOPE_SESSION, "save-scumming-shinies-at-start", 0);
