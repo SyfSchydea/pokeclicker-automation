@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Digger
 // @namespace    http://tampermonkey.net/
-// @version      1.5.3
+// @version      1.5.3+chisel-search-1
 // @description  Automates digging underground in Pokéclicker.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -385,7 +385,7 @@
 	 *
 	 * @return {{x: number, y: number}} - Location to chisel.
 	 */
-	function findChiselSpot() {
+	function findChiselSpotExcavate() {
 		const startingTile = page.findUnexcavatedItem();
 		if (!startingTile) {
 			throw new Error("Failed to find starting point");
@@ -417,6 +417,62 @@
 		}
 
 		throw new Error("Failed to find chisel tile");
+	}
+
+	// Find a spot to use the chisel while searching for unfound items.
+	function findChiselSpotSearch() {
+		// Go through list of all tiles to find all fully excavated tiles.
+		const gridSize = page.getMineGridSize();
+		const activeTiles = [];
+		for (let y = 0; y < gridSize.y; y++) {
+			for (let x = 0; x < gridSize.x; x++) {
+				if (page.tileRevealed({x, y})) {
+					activeTiles.push({x, y, distance: 0});
+				}
+			}
+		}
+
+		// Breadth first search to find tiles furthest from
+		// the nearest excavated tile, manhattan distance.
+		const expanded = new Set();
+		let maxDistance = 0;
+		let furthestTiles = [];
+		while (activeTiles.length > 0) {
+			const thisTile = activeTiles.shift();
+			const thisKey = expandedListKey(thisTile);
+
+			if (expanded.has(thisKey)) {
+				continue;
+			}
+
+			for (const newTile of surroundingTiles(thisTile, gridSize)) {
+				activeTiles.push({
+					x: newTile.x,
+					y: newTile.y,
+					distance: thisTile.distance + 1,
+				});
+			}
+
+			if (thisTile.distance > maxDistance) {
+				maxDistance = thisTile.distance;
+				furthestTiles = [];
+			}
+			if (thisTile.distance == maxDistance) {
+				furthestTiles.push(thisTile);
+			}
+
+			expanded.add(thisKey);
+		}
+
+		const chosenTile = furthestTiles[0];
+		return {
+			x: chosenTile.x,
+			y: chosenTile.y,
+		};
+
+		function expandedListKey(pos) {
+			return pos.x + "," + pos.y;
+		}
 	}
 
 	/**
@@ -482,7 +538,7 @@
 
 			if (page.hasLocatedAllRewards()) {
 				if (page.canAffordChisel()) {
-					page.useChisel(findChiselSpot());
+					page.useChisel(findChiselSpotExcavate());
 					return DELAY_CHISEL;
 				}
 
@@ -504,9 +560,9 @@
 				return DELAY_SURVEY;
 			}
 
-			if (page.canAffordBomb()) {
-				page.useBomb();
-				return DELAY_BOMB;
+			if (page.canAffordChisel()) {
+				page.useChisel(findChiselSpotSearch());
+				return DELAY_CHISEL;
 			}
 
 			return DELAY_IDLE;
