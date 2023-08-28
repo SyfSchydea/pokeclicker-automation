@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.26
+// @version      1.26+qualot-1
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -830,6 +830,15 @@
 	// Layouts used when farming for grow mutations.
 	// Indexed by the number of parent berries involved in the mutation.
 	const GROW_MUTATION_LAYOUTS = [];
+
+	GROW_MUTATION_LAYOUTS[2] = [
+		 0, -1, -1,  0, -1,
+		-1,  1, -1, -1,  1,
+		-1, -1, -1, -1, -1,
+		 0, -1, -1,  0, -1,
+		-1,  1, -1, -1,  1,
+	];
+
 	GROW_MUTATION_LAYOUTS[4] = [
 		 0, -1,  1, -1,  0,
 		 2, -1,  3, -1,  2,
@@ -876,6 +885,14 @@
 		1, 1, 1, 1, 1,
 		0, 0, 0, 0, 0,
 	]);
+
+	/**
+	 * List of grow mutations which we attempt but don't
+	 * try to deduce them from the code.
+	 */
+	const HARD_CODED_GROW_MUTATIONS = [
+		{target: "Qualot", parents: ["Pinap", "Mago"]},
+	];
 
 	/**
 	 * Converts a mutation layout from the readable format found in the
@@ -1802,6 +1819,14 @@
 	}
 
 	/**
+	 * Check if the player has any of the given berry, includin on the field.
+	 */
+	function hasBerry(berryName) {
+		return page.getBerryAmount(berryName) > 0
+				|| page.isBerryOnField(berryName);
+	}
+
+	/**
 	 * Handles automatically completing a GrowNearBerryMutation.
 	 */
 	class GrowNearBerryMutateTask extends MutateTask {
@@ -1821,8 +1846,7 @@
 		}
 
 		hasExpired(unusedNow) {
-			return page.getBerryAmount(this.targetBerry) > 0
-					|| page.isBerryOnField(this.targetBerry);
+			return hasBerry(this.targetBerry);
 		}
 	}
 
@@ -1848,6 +1872,24 @@
 		}
 
 		tickTimeoutId = setTimeout(tick, delay);
+	}
+
+	function findEligibleHardCodedMutation() {
+		mutationLoop: for (const mutation of HARD_CODED_GROW_MUTATIONS) {
+			if (hasBerry(mutation.target)) {
+				continue;
+			}
+
+			for (const parent of mutation.parents) {
+				if (page.getBerryAmount(parent) < PAGE_PLOT_COUNT) {
+					continue mutationLoop;
+				}
+			}
+
+			return mutation;
+		}
+
+		return null;
 	}
 
 	/**
@@ -1945,6 +1987,17 @@
 						"into", growNearFlavourMutation.targetBerry);
 				currentTask = new SingleParentGrowMutationTask(
 						growNearFlavourMutation.parentBerry, growNearFlavourMutation.targetBerry, 3);
+				priority = currentTask.priority;
+				break mutationTasks;
+			}
+
+			const hardCodedMutation = findEligibleHardCodedMutation();
+			if (hardCodedMutation) {
+				console.log("Farming to grow",
+						hardCodedMutation.parents.join(", "), "into",
+						hardCodedMutation.target);
+				currentTask = new GrowNearBerryMutateTask(
+						hardCodedMutation.parents, hardCodedMutation.target);
 				priority = currentTask.priority;
 				break mutationTasks;
 			}
