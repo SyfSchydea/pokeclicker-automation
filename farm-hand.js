@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.28
+// @version      1.28+tamato-0
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -547,6 +547,63 @@
 				return {
 					targetBerry: this._lookupBerry(mutation.mutatedBerry),
 					parentBerry: this._lookupBerry(mutation.originalBerry),
+				};
+			}
+
+			return null;
+		},
+
+		/**
+		 * Find an evolve-near-berry mutation which is
+		 * eligible and useful to grind for.
+		 * Will only return mutations which use a single catalyst berry.
+		 *
+		 * @return {{
+		 *   targetBerry: string,   - Name of berry produced by this mutation.
+		 *   parentBerry: string,   - Name of berry mutated in this mutation.
+		 *   catalystBerry: string, - Name of berry which must be next to the parent berry.
+		 * }}
+		 */
+		getEligibleEvolveNearBerryMutation() {
+			const farming = this._getFarmingModule();
+			if (!farming) {
+				return null;
+			}
+
+			for (const mutation of farming.mutations) {
+				if (!(mutation instanceof EvolveNearBerryMutation)) {
+					continue;
+				}
+
+				// Exclude parasite mutations,
+				// a subclass of EvolveNearBerryMutation
+				if (mutation instanceof ParasiteMutation) {
+					continue;
+				}
+
+				// Skip mutations for berries we've already unlocked
+				if (farming.berryList[mutation.mutatedBerry]() > 0
+						|| this._isBerryIdOnField(mutation.mutatedBerry)) {
+					continue;
+				}
+
+				// Filter for mutations which only require a single catalyst
+				if (mutation.berryReqs.length != 1) {
+					continue;
+				}
+
+				const catalystBerry = mutation.berryReqs[0];
+
+				// Skip mutations which we don't have the ingredients for
+				if (farming.berryList[mutation.originalBerry]() < 26
+						|| farming.berryList[catalystBerry]() < 26) {
+					continue;
+				}
+
+				return {
+					targetBerry = this._lookupBerry(mutation.mutatedBerry),
+					parentBerry = this._lookupBerry(mutation.originalBerry),
+					catalystBerry = this._lookupBerry(catalystBerry),
 				};
 			}
 
