@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Digger
 // @namespace    http://tampermonkey.net/
-// @version      1.6
+// @version      1.6+thin-first-2
 // @description  Automates digging underground in Pokéclicker.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -50,6 +50,8 @@
 	 */
 
 	const page = {
+		CHISEL_LAYERS: 2,
+
 		/**
 		 * Check if the game has been loaded.
 		 *
@@ -275,13 +277,23 @@
 		},
 
 		/**
+		 * Find the number of layers remaining at the specified position.
+		 *
+		 * @param pos {{x: number, y: number}} - Tile position to check.
+		 * @return    {number}                 - Number of layers left on the tile.
+		 */
+		getTileLayers(pos) {
+			return Mine.grid[pos.y][pos.x]();
+		},
+
+		/**
 		 * Check if the given tile has been fully revealed.
 		 *
 		 * @param pos {{x: number, y: number}} - Tile position to check.
 		 * @return                             - Truthy if the tile has been revealed. Falsey otherwise.
 		 */
 		tileRevealed(pos) {
-			return Mine.grid[pos.y][pos.x]() <= 0;
+			return this.getTileLayers(pos) <= 0;
 		},
 
 		/**
@@ -436,6 +448,7 @@
 		// the nearest excavated tile, manhattan distance.
 		const expanded = new Set();
 		let maxDistance = 0;
+		let minChisels = Infinity;
 		let furthestTiles = [];
 		while (activeTiles.length > 0) {
 			const thisTile = activeTiles.shift();
@@ -453,15 +466,33 @@
 				});
 			}
 
-			if (thisTile.distance > maxDistance) {
-				maxDistance = thisTile.distance;
-				furthestTiles = [];
-			}
-			if (thisTile.distance == maxDistance) {
-				furthestTiles.push(thisTile);
+			expanded.add(thisKey);
+
+			if (thisTile.distance < maxDistance) {
+				continue;
 			}
 
-			expanded.add(thisKey);
+			const thisTileChisels = Math.ceil(page.getTileLayers(thisTile) / page.CHISEL_LAYERS);
+
+			if (thisTile.distance > maxDistance) {
+				maxDistance = thisTile.distance;
+				minChisels = thisTileChisels;
+				furthestTiles = [thisTile];
+				continue;
+			}
+
+			if (thisTileChisels > minChisels) {
+				continue;
+			}
+
+			if (thisTileChisels < minChisels) {
+				maxDistance = thisTile.distance;
+				minChisels = thisTileChisels;
+				furthestTiles = [thisTile];
+				continue;
+			}
+
+			furthestTiles.push(thisTile);
 		}
 
 		const chosenTile = furthestTiles[0];
