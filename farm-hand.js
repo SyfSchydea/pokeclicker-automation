@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.28+tamato-0
+// @version      1.28+tamato-1
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -562,7 +562,7 @@
 		 *   targetBerry: string,   - Name of berry produced by this mutation.
 		 *   parentBerry: string,   - Name of berry mutated in this mutation.
 		 *   catalystBerry: string, - Name of berry which must be next to the parent berry.
-		 * }}
+		 * } | null}                - Object containing info about the mutation, or null if there are none.
 		 */
 		getEligibleEvolveNearBerryMutation() {
 			const farming = this._getFarmingModule();
@@ -949,6 +949,19 @@
 		0, 0, 0, 0, 0,
 		1, 1, 1, 1, 1,
 		0, 0, 0, 0, 0,
+	]);
+
+	/**
+	 * Layout for evolve-near-berry mutations.
+	 * The parent berry goes in slots labelled 0,
+	 * and the catalyst berries go in slots labelled 1.
+	 */
+	const EVOLVE_NEAR_BERRY_LAYOUT = ([
+		0, 0, 0, 0, 0,
+		0, 1, 0, 0, 1,
+		0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0,
+		0, 1, 0, 0, 1,
 	]);
 
 	/**
@@ -1432,6 +1445,32 @@
 			}
 
 			if (plantOne(this.parentBerry, this.layout[1]) != null) {
+				return DELAY_PLANT;
+			}
+
+			return DELAY_IDLE;
+		}
+	}
+
+	/**
+	 * Class for performing an evolve-near-berry mutation.
+	 */
+	class EvolveNearBerryTask extends FullFieldMutationTask {
+		constructor(targetBerry, parentBerry, catalystBerry) {
+			super(parentBerry, targetBerry);
+			this.catalystBerry = catalystBerry;
+		}
+
+		performAction() {
+			if (harvestOne({exceptBerries:
+					[this.parentBerry, this.catalystBerry]}) != null) {
+				return DELAY_HARVEST;
+			}
+
+			const layout = EVOLVE_NEAR_BERRY_LAYOUT;
+
+			if (plantOne(this.parentBerry, layout[0]) != null
+					|| plantOne(this.catalystBerry, layout[1]) != null) {
 				return DELAY_PLANT;
 			}
 
@@ -2064,6 +2103,19 @@
 						hardCodedMutation.target);
 				currentTask = new GrowNearBerryMutateTask(
 						hardCodedMutation.parents, hardCodedMutation.target);
+				priority = currentTask.priority;
+				break mutationTasks;
+			}
+
+			const evolveNearBerryMutation = page.getEligibleEvolveNearBerryMutation();
+			if (evolveNearBerryMutation) {
+				console.log("Farming to grow", evolveNearBerryMutation.parentBerry,
+						"and", evolveNearBerryMutation.catalystBerry,
+						"into", evolveNearBerryMutation.targetBerry);
+				currentTask = new EvolveNearBerryTask(
+						evolveNearBerryMutation.targetBerry,
+						evolveNearBerryMutation.parentBerry,
+						evolveNearBerryMutation.catalystBerry);
 				priority = currentTask.priority;
 				break mutationTasks;
 			}
