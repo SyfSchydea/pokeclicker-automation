@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.28+tamato-2
+// @version      1.28+tamato-3
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -956,7 +956,7 @@
 	 * The parent berry goes in slots labelled 0,
 	 * and the catalyst berries go in slots labelled 1.
 	 */
-	const EVOLVE_NEAR_BERRY_LAYOUT = ([
+	const EVOLVE_NEAR_BERRY_LAYOUT = convertMutationLayout([
 		0, 0, 0, 0, 0,
 		0, 1, 0, 0, 1,
 		0, 0, 0, 0, 0,
