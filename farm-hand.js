@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.28+tamato-1
+// @version      1.28+tamato-2
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -601,9 +601,9 @@
 				}
 
 				return {
-					targetBerry = this._lookupBerry(mutation.mutatedBerry),
-					parentBerry = this._lookupBerry(mutation.originalBerry),
-					catalystBerry = this._lookupBerry(catalystBerry),
+					targetBerry: this._lookupBerry(mutation.mutatedBerry),
+					parentBerry: this._lookupBerry(mutation.originalBerry),
+					catalystBerry: this._lookupBerry(catalystBerry),
 				};
 			}
 
