@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Digger
 // @namespace    http://tampermonkey.net/
-// @version      1.6+thin-first-1
+// @version      1.6+thin-first-2
 // @description  Automates digging underground in Pokéclicker.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -283,7 +283,7 @@
 		 * @return    {number}                 - Number of layers left on the tile.
 		 */
 		getTileLayers(pos) {
-			return Mine.grid[pos.x][pos.y]();
+			return Mine.grid[pos.y][pos.x]();
 		},
 
 		/**
