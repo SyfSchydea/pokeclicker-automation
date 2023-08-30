@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.28
+// @version      1.28+tamato-3
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -554,6 +554,63 @@
 		},
 
 		/**
+		 * Find an evolve-near-berry mutation which is
+		 * eligible and useful to grind for.
+		 * Will only return mutations which use a single catalyst berry.
+		 *
+		 * @return {{
+		 *   targetBerry: string,   - Name of berry produced by this mutation.
+		 *   parentBerry: string,   - Name of berry mutated in this mutation.
+		 *   catalystBerry: string, - Name of berry which must be next to the parent berry.
+		 * } | null}                - Object containing info about the mutation, or null if there are none.
+		 */
+		getEligibleEvolveNearBerryMutation() {
+			const farming = this._getFarmingModule();
+			if (!farming) {
+				return null;
+			}
+
+			for (const mutation of farming.mutations) {
+				if (!(mutation instanceof EvolveNearBerryMutation)) {
+					continue;
+				}
+
+				// Exclude parasite mutations,
+				// a subclass of EvolveNearBerryMutation
+				if (mutation instanceof ParasiteMutation) {
+					continue;
+				}
+
+				// Skip mutations for berries we've already unlocked
+				if (farming.berryList[mutation.mutatedBerry]() > 0
+						|| this._isBerryIdOnField(mutation.mutatedBerry)) {
+					continue;
+				}
+
+				// Filter for mutations which only require a single catalyst
+				if (mutation.berryReqs.length != 1) {
+					continue;
+				}
+
+				const catalystBerry = mutation.berryReqs[0];
+
+				// Skip mutations which we don't have the ingredients for
+				if (farming.berryList[mutation.originalBerry]() < 26
+						|| farming.berryList[catalystBerry]() < 26) {
+					continue;
+				}
+
+				return {
+					targetBerry: this._lookupBerry(mutation.mutatedBerry),
+					parentBerry: this._lookupBerry(mutation.originalBerry),
+					catalystBerry: this._lookupBerry(catalystBerry),
+				};
+			}
+
+			return null;
+		},
+
+		/**
 		 * Find a grow-near-berry mutation which is eligible and useful to grind for.
 		 * These mutations are achieved by surrounding an empty
 		 * plot with at least one of each of the parent berries.
@@ -892,6 +949,19 @@
 		0, 0, 0, 0, 0,
 		1, 1, 1, 1, 1,
 		0, 0, 0, 0, 0,
+	]);
+
+	/**
+	 * Layout for evolve-near-berry mutations.
+	 * The parent berry goes in slots labelled 0,
+	 * and the catalyst berries go in slots labelled 1.
+	 */
+	const EVOLVE_NEAR_BERRY_LAYOUT = convertMutationLayout([
+		0, 0, 0, 0, 0,
+		0, 1, 0, 0, 1,
+		0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0,
+		0, 1, 0, 0, 1,
 	]);
 
 	/**
@@ -1375,6 +1445,32 @@
 			}
 
 			if (plantOne(this.parentBerry, this.layout[1]) != null) {
+				return DELAY_PLANT;
+			}
+
+			return DELAY_IDLE;
+		}
+	}
+
+	/**
+	 * Class for performing an evolve-near-berry mutation.
+	 */
+	class EvolveNearBerryTask extends FullFieldMutationTask {
+		constructor(targetBerry, parentBerry, catalystBerry) {
+			super(parentBerry, targetBerry);
+			this.catalystBerry = catalystBerry;
+		}
+
+		performAction() {
+			if (harvestOne({exceptBerries:
+					[this.parentBerry, this.catalystBerry]}) != null) {
+				return DELAY_HARVEST;
+			}
+
+			const layout = EVOLVE_NEAR_BERRY_LAYOUT;
+
+			if (plantOne(this.parentBerry, layout[0]) != null
+					|| plantOne(this.catalystBerry, layout[1]) != null) {
 				return DELAY_PLANT;
 			}
 
@@ -2007,6 +2103,19 @@
 						hardCodedMutation.target);
 				currentTask = new GrowNearBerryMutateTask(
 						hardCodedMutation.parents, hardCodedMutation.target);
+				priority = currentTask.priority;
+				break mutationTasks;
+			}
+
+			const evolveNearBerryMutation = page.getEligibleEvolveNearBerryMutation();
+			if (evolveNearBerryMutation) {
+				console.log("Farming to grow", evolveNearBerryMutation.parentBerry,
+						"and", evolveNearBerryMutation.catalystBerry,
+						"into", evolveNearBerryMutation.targetBerry);
+				currentTask = new EvolveNearBerryTask(
+						evolveNearBerryMutation.targetBerry,
+						evolveNearBerryMutation.parentBerry,
+						evolveNearBerryMutation.catalystBerry);
 				priority = currentTask.priority;
 				break mutationTasks;
 			}
