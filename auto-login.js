@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Login
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @description  Automatically re-logs in, if you refresh
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -24,6 +24,15 @@
 	 */
 
 	const page = {
+		/**
+		 * Test if the game has loaded.
+		 *
+		 * @return - Truthy if the game has loaded, false otherwise.
+		 */
+		gameLoaded() {
+			return App.game;
+		},
+
 		/**
 		 * Fetch the save key of the currently loaded save.
 		 *
@@ -93,6 +102,70 @@
 
 			return save.key;
 		},
+
+		/**
+		 * Find the normalised name of a pokemon.
+		 * Allows for some user error on things such as capitalisation.
+		 *
+		 * @param name {string} - User-entered name of a pokemon.
+		 * @return     {string} - Correctly spelled, capitalised form of the name,
+		 *                        or null if the pokemon can't be found.
+		 */
+		normalisePokemonName(name) {
+			const normName = PokemonHelper.getPokemonByName(name).name;
+			if (normName == "MissingNo.") {
+				return null;
+			}
+
+			return normName;
+		},
+
+		/**
+		 * Verify that the given pokemon is available from a shop in the current town.
+		 *
+		 * @param name {string} - Normalised name of pokemon to search for.
+		 * @return              - Truthy if the pokemon can be bought here, falsey if not.
+		 */
+		findPokemonInShop(name) {
+			for (const townContent of player.town().content) {
+				if (!(townContent instanceof Shop)) {
+					continue;
+				}
+
+				for (const item of townContent.items) {
+					if (item instanceof PokemonItem && item.name == name
+							&& item.isAvailable()) {
+						return true;
+					}
+				}
+			}
+
+			return false;
+		},
+
+		/**
+		 * Attempt to buy the given pokemon as an item.
+		 *
+		 * @param name {string} - Name of the pokemon to buy.
+		 */
+		buyPokemon(name) {
+			const item = ItemList[name];
+			if (!item || !(item instanceof PokemonItem)) {
+				throw new Error("Failed to find pokemon item for " + name);
+			}
+
+			item.buy(1);
+		},
+
+		/**
+		 * Check if the player has caught a shiny of the specified species.
+		 *
+		 * @param name {string} - Name of the pokemon to look up.
+		 * @return              - Truthy if the player has that shiny, falsey if not.
+		 */
+		hasShiny(name) {
+			return App.game.party.alreadyCaughtPokemonByName(name, true);
+		},
 	};
 
 	//////////////////////////
@@ -104,13 +177,24 @@
 	 * through the page interface defined above.
 	 */
 
+	// Window key for misc save-scum grind user-facing functions
+	const GRIND_WINDOW_KEY = "grind";
+
 	const KEY_PREFIX = "syfschydea--auto-login--";
 	const SSKEY_SAVE_KEY     = KEY_PREFIX + "save-key";
 	const SSKEY_SAVE_STATE   = KEY_PREFIX + "save-state--";
 	const SSKEY_NEXT_LOAD_ID = KEY_PREFIX + "next-load-id";
 
-	const DELAY_LOGIN =       500;
-	const DELAY_WAIT  = 30 * 1000;
+	// Name of pokemon we're trying to buy shiny
+	const SSKEY_BUY_SHINY_PKMN = KEY_PREFIX + "buy-shiny-pkmn";
+
+	const SAVEID_BUY_SHINY = "auto-save--buy-shiny";
+
+	const DELAY_LOGIN     =      500;
+	const DELAY_WAIT      = 5 * 1000;
+
+	const DELAY_START_CMD =     1000;
+	const DELAY_BUY       =     1000;
 
 	function tick() {
 		let cachedKey = sessionStorage.getItem(SSKEY_SAVE_KEY);
@@ -168,6 +252,65 @@
 		location.reload();
 	}
 
+	// Number of pokemon bought for the buyShiny process
+	let pkmnBought = 0;
+
+	function buyShinyTick() {
+		const pkmn = sessionStorage.getItem(SSKEY_BUY_SHINY_PKMN);
+		if (!pkmn) {
+			return;
+		}
+
+		if (!page.gameLoaded()) {
+			return setTimeout(buyShinyTick, DELAY_WAIT);
+		}
+
+		if (page.hasShiny(pkmn)) {
+			console.log("Obtained shiny", pkmn);
+			sessionStorage.removeItem(SSKEY_BUY_SHINY_PKMN);
+			return;
+		}
+
+		// Double check that we can still access the pokemon
+		if (!page.findPokemonInShop(pkmn)) {
+			console.error(`Failed to find ${pkmn} in a shop at your current location`);
+			return;
+		}
+
+		// If already attempted to buy, load state
+		if (pkmnBought > 0) {
+			loadState(SAVEID_BUY_SHINY);
+			return;
+		}
+
+		page.buyPokemon(pkmn);
+		pkmnBought += 1;
+		return setTimeout(buyShinyTick, DELAY_BUY);
+	}
+
+	/**
+	 * User-facing command.
+	 * Begin save-scumming for the given shop-bought shiny.
+	 * Should be run when at the town which has the shop you want to buy from.
+	 */
+	function cmdBuyShiny(pkmnName) {
+		// Check that the pokemon exists
+		const normName = page.normalisePokemonName(pkmnName);
+		if (!normName) {
+			throw new Error(`Couldn't find pokemon "${pkmnName}"`);
+		}
+
+		// Check that we can access this pokemon
+		if (!page.findPokemonInShop(normName)) {
+			throw new Error(`Failed to find ${normName} in a shop at your current location`);
+		}
+
+		// Start the grind process
+		saveState(SAVEID_BUY_SHINY);
+		sessionStorage.setItem(SSKEY_BUY_SHINY_PKMN, normName);
+		setTimeout(buyShinyTick, DELAY_START_CMD);
+	}
+
 	function exposeFunctions() {
 		if (!window.syfScripts) {
 			window.syfScripts = {};
@@ -177,10 +320,15 @@
 			saveState,
 			loadState,
 		};
+
+		window[GRIND_WINDOW_KEY] = {
+			buyShiny: cmdBuyShiny,
+		};
 	}
 
 	(function main() {
 		exposeFunctions();
 		tick();
+		setTimeout(buyShinyTick, DELAY_START_CMD);
 	})();
 })();
