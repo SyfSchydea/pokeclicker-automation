@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Login
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.4
 // @description  Automatically re-logs in, if you refresh
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -186,7 +186,7 @@
 	const SSKEY_NEXT_LOAD_ID = KEY_PREFIX + "next-load-id";
 
 	// Name of pokemon we're trying to buy shiny
-	const SSKEY_BUY_SHINY_PKMN = KEY_PREFIX + "buy-shiny-pkmn";
+	const SSKEY_BUY_SHINY_SETTINGS = KEY_PREFIX + "buy-shiny-settings";
 
 	const SAVEID_BUY_SHINY = "auto-save--buy-shiny";
 
@@ -256,34 +256,36 @@
 	let pkmnBought = 0;
 
 	function buyShinyTick() {
-		const pkmn = sessionStorage.getItem(SSKEY_BUY_SHINY_PKMN);
-		if (!pkmn) {
+		const settingsJson = sessionStorage.getItem(SSKEY_BUY_SHINY_SETTINGS);
+		if (!settingsJson) {
 			return;
 		}
+
+		const settings = JSON.parse(settingsJson);
 
 		if (!page.gameLoaded()) {
 			return setTimeout(buyShinyTick, DELAY_WAIT);
 		}
 
-		if (page.hasShiny(pkmn)) {
-			console.log("Obtained shiny", pkmn);
-			sessionStorage.removeItem(SSKEY_BUY_SHINY_PKMN);
+		if (page.hasShiny(settings.pkmn)) {
+			console.log("Obtained shiny", settings.pkmn);
+			sessionStorage.removeItem(SSKEY_BUY_SHINY_SETTINGS);
 			return;
 		}
 
 		// Double check that we can still access the pokemon
-		if (!page.findPokemonInShop(pkmn)) {
-			console.error(`Failed to find ${pkmn} in a shop at your current location`);
+		if (!page.findPokemonInShop(settings.pkmn)) {
+			console.error(`Failed to find ${settings.pkmn} in a shop at your current location`);
 			return;
 		}
 
 		// If already attempted to buy, load state
-		if (pkmnBought > 0) {
+		if (pkmnBought >= settings.count) {
 			loadState(SAVEID_BUY_SHINY);
 			return;
 		}
 
-		page.buyPokemon(pkmn);
+		page.buyPokemon(settings.pkmn);
 		pkmnBought += 1;
 		return setTimeout(buyShinyTick, DELAY_BUY);
 	}
@@ -292,8 +294,11 @@
 	 * User-facing command.
 	 * Begin save-scumming for the given shop-bought shiny.
 	 * Should be run when at the town which has the shop you want to buy from.
+	 *
+	 * Takes an optional param of count.
+	 * The script will buy this many of the pokemon before reloading.
 	 */
-	function cmdBuyShiny(pkmnName) {
+	function cmdBuyShiny(pkmnName, count=1) {
 		// Check that the pokemon exists
 		const normName = page.normalisePokemonName(pkmnName);
 		if (!normName) {
@@ -305,9 +310,16 @@
 			throw new Error(`Failed to find ${normName} in a shop at your current location`);
 		}
 
+		if (typeof(count) != "number") {
+			throw new Error("count must be a number");
+		}
+
 		// Start the grind process
 		saveState(SAVEID_BUY_SHINY);
-		sessionStorage.setItem(SSKEY_BUY_SHINY_PKMN, normName);
+
+		const settings = JSON.stringify({pkmn: normName, count});
+		sessionStorage.setItem(SSKEY_BUY_SHINY_SETTINGS, settings);
+
 		setTimeout(buyShinyTick, DELAY_START_CMD);
 	}
 
