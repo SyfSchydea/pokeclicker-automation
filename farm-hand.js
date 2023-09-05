@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.30
+// @version      1.31
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -1525,6 +1525,17 @@
 		}
 	}
 
+	class TimedExpiration {
+		constructor(expirationTime) {
+			this.expirationTime = expirationTime;
+		}
+
+		hasExpired() {
+			const now = new Date();
+			return +now >= this.expirationTime;
+		}
+	}
+
 	class PlotUnlockAction {
 		constructor(plotIdx) {
 			this.plotIdx = plotIdx;
@@ -1536,10 +1547,42 @@
 		}
 	}
 
+	// Maintain a full field of the specified berry
+	class FullFieldAction {
+		constructor(berry) {
+			this.berry = berry;
+		}
+
+		performAction() {
+			const plantedPlot = plantOne(this.berry);
+			if (plantedPlot != null) {
+				return DELAY_PLANT;
+			}
+
+			if (harvestOne({exceptBerries: [this.berry]}) != null) {
+				return DELAY_HARVEST;
+			}
+
+			// Harvest some if we're running low on the berry in question
+			if (page.getBerryAmount(this.berry) < 25
+					&& harvestOne({onlyBerries: [this.berry]}) != null) {
+				return DELAY_HARVEST;
+			}
+
+			return DELAY_IDLE;
+		}
+	}
+
 	function makePlotUnlockTask(plotIdx) {
 		return new GenericTask(PRIORITY_PLOT_UNLOCK,
 				new PlotUnlockExpiration(plotIdx),
 				new PlotUnlockAction(plotIdx));
+	}
+
+	function makeUserWanderTask(berry, expiration) {
+		return new GenericTask(PRIORITY_USER,
+				new TimedExpiration(expiration),
+				new FullFieldAction(berry));
 	}
 
 	/**
@@ -2236,11 +2279,28 @@
 		console.log("Attempting to evolve", parentBerries, "for", DURATION, "ms");
 	}
 
+	function cmdWander(berry, minutes=Infinity) {
+		const berries = [berry];
+		validateParentBerries(berries);
+		berry = berries[0];
+
+		const maxLength = MAX_TASK_LENGTH + page.getHighestRegion() * TASK_LENGTH_REGION_BONUS;
+		if (minutes > maxLength) {
+			minutes = maxLength;
+		}
+
+		const now = new Date();
+		currentTask = makeUserWanderTask(berry, +now + minutes * 60 * 1000);
+		scheduleTick(DELAY_TASK_START);
+		console.log("Farming", berry, "for wanderers for", minutes, "minutes");
+	}
+
 	(function main() {
 		window[WINDOW_KEY] = {
 			start: cmdStart,
 			mutate: cmdMutate,
 			evolve: cmdEvolve,
+			wander: cmdWander,
 		}
 
 		scheduleTick(DELAY_NO_TASK);
