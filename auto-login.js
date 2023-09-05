@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Login
 // @namespace    http://tampermonkey.net/
-// @version      1.4
+// @version      1.5
 // @description  Automatically re-logs in, if you refresh
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -158,6 +158,16 @@
 		},
 
 		/**
+		 * Check if the player has caught the specified species.
+		 *
+		 * @param name {string} - Name of the pokemon to look up.
+		 * @return              - Truthy if the player has that pokemon, falsey if not.
+		 */
+		hasPokemon(name) {
+			return App.game.party.alreadyCaughtPokemonByName(name);
+		},
+
+		/**
 		 * Check if the player has caught a shiny of the specified species.
 		 *
 		 * @param name {string} - Name of the pokemon to look up.
@@ -165,6 +175,78 @@
 		 */
 		hasShiny(name) {
 			return App.game.party.alreadyCaughtPokemonByName(name, true);
+		},
+
+		/**
+		 * Check that the given item name is a real evolution stone,
+		 * and that the player has at least one.
+		 *
+		 * @param name {string} - Item name to look up.
+		 * @return              - Truthy if the item is an evolution stone which the player owns.
+		 *                        Falsey if not.
+		 */
+		hasStone(name) {
+			return (ItemList[name] instanceof EvolutionStone
+					&& player.itemList[name]?.() > 0);
+		},
+
+		/**
+		 * Check if the given stone can be used on the given pokemon,
+		 * and what pokemon can be produced if so.
+		 *
+		 * Note: This does not account for more than one evolution resulting from the same stone on the same pokemon.
+		 * I'm not sure if this is something that actually shows up in the game,
+		 * but if it does, it'll only return one of the evolutions.
+		 *
+		 * @param pkmn  {string}      - Name of the pokemon to test.
+		 * @param stone {string}      - Name of the stone to use on that pokemon.
+		 * @return      {string|null} - Name of the pokemon produced by using the stone,
+		 *                              or null if the stone can't make the original pokemon evolve.
+		 */
+		getStoneEvolution(pkmn, stone) {
+			const pkmnData = PokemonHelper.getPokemonByName(pkmn);
+			if (!pkmnData) {
+				throw new Error(`Failed to find "${pkmn}"`);
+			}
+
+			if (!pkmnData.evolutions) {
+				return null;
+			}
+
+			const stoneData = ItemList[stone];
+			if (!stoneData || !(stoneData instanceof EvolutionStone)) {
+				throw new Error(`"${stone}" is not a known evolution item`);
+			}
+
+			for (let i = 0; i < pkmnData.evolutions.length; ++i) {
+				const evo = pkmnData.evolutions[i];
+
+				if (evo.trigger == EvoTrigger.STONE
+						&& evo.stone == stoneData.type
+						&& EvolutionHandler.isSatisfied(evo)) {
+					return evo.evolvedPokemon;
+				}
+			}
+
+			return null;
+		},
+
+		/**
+		 * Attempt to use the given evolution stone on the given pokemon.
+		 *
+		 * @param pkmn  {string} - Name of the pokemon to evolve.
+		 * @param stone {string} - Name of the stone to use on that pokemon.
+		 */
+		useEvolutionStone(pkmn, stone) {
+			const stoneData = ItemList[stone];
+			if (!stoneData || !(stoneData instanceof EvolutionStone)) {
+				throw new Error(`"${stone}" is not a known evolution item`);
+			}
+
+			ItemHandler.stoneSelected(stone);
+			ItemHandler.pokemonSelected(pkmn);
+			ItemHandler.amountSelected(1);
+			ItemHandler.useStones();
 		},
 	};
 
@@ -185,10 +267,11 @@
 	const SSKEY_SAVE_STATE   = KEY_PREFIX + "save-state--";
 	const SSKEY_NEXT_LOAD_ID = KEY_PREFIX + "next-load-id";
 
-	// Name of pokemon we're trying to buy shiny
 	const SSKEY_BUY_SHINY_SETTINGS = KEY_PREFIX + "buy-shiny-settings";
+	const SSKEY_EVO_STONE_SETTINGS = KEY_PREFIX + "evo-stone-settings";
 
 	const SAVEID_BUY_SHINY = "auto-save--buy-shiny";
+	const SAVEID_EVO_STONE = "auto-save--evo-stone";
 
 	const DELAY_LOGIN     =      500;
 	const DELAY_WAIT      = 5 * 1000;
@@ -323,6 +406,79 @@
 		setTimeout(buyShinyTick, DELAY_START_CMD);
 	}
 
+	function evoStoneTick() {
+		const settingsJson = sessionStorage.getItem(SSKEY_EVO_STONE_SETTINGS);
+		if (!settingsJson) {
+			return;
+		}
+
+		if (!page.gameLoaded()) {
+			return setTimeout(evoStoneTick, DELAY_WAIT);
+		}
+
+		const settings = JSON.parse(settingsJson);
+
+		if (page.hasShiny(settings.targetPkmn)) {
+			console.log("Got a shiny", settings.targetPkmn);
+			sessionStorage.removeItem(SSKEY_EVO_STONE_SETTINGS);
+			return;
+		}
+
+		// Check if we still have the pokemon and the stone
+		if (!page.hasStone(settings.stone) || !page.hasPokemon(settings.basePkmn)) {
+			loadState(SAVEID_EVO_STONE);
+			return;
+		}
+
+		// Use the stone on the pokemon
+		page.useEvolutionStone(settings.basePkmn, settings.stone);
+		return setTimeout(evoStoneTick, DELAY_BUY);
+	}
+
+	/**
+	 * User-facing command.
+	 * Start save-scumming for a shiny from an evolution stone.
+	 */
+	function cmdEvoStone(basePokemon, stone) {
+		// Normalise stone name to have correct capitalisation, and convert spaces to underscores
+		let stoneName = stone.trim().replace(/ +/g, "_");
+		stoneName = stoneName[0].toUpperCase() + stoneName.slice(1).toLowerCase();
+
+		if (!page.hasStone(stoneName)) {
+			throw new Error("You do not have any " + stone);
+		}
+
+		// Check that the pokemon exists
+		const basePkmnName = page.normalisePokemonName(basePokemon);
+		if (!basePkmnName) {
+			throw new Error(`Couldn't find pokemon "${basePokemon}"`);
+		}
+
+		if (!page.hasPokemon(basePkmnName)) {
+			throw new Error("You don't have a " + basePkmnName);
+		}
+
+		// Check that the stone can be used to evolve the pokemon
+		const resultingPkmn = page.getStoneEvolution(basePkmnName, stoneName);
+		if (!resultingPkmn) {
+			throw new Error(`${stoneName} can't be used on ${basePkmnName}`);
+		}
+
+		saveState(SAVEID_EVO_STONE);
+
+		const settings = JSON.stringify({
+			basePkmn:   basePkmnName,
+			targetPkmn: resultingPkmn,
+			stone:      stoneName,
+		});
+		sessionStorage.setItem(SSKEY_EVO_STONE_SETTINGS, settings);
+
+		setTimeout(evoStoneTick, DELAY_START_CMD);
+
+		console.log("Trying to get a shiny", resultingPkmn,
+				"from using a", stoneName, "on", basePkmnName);
+	}
+
 	function exposeFunctions() {
 		if (!window.syfScripts) {
 			window.syfScripts = {};
@@ -335,6 +491,7 @@
 
 		window[GRIND_WINDOW_KEY] = {
 			buyShiny: cmdBuyShiny,
+			evoStoneShiny: cmdEvoStone,
 		};
 	}
 
@@ -342,5 +499,6 @@
 		exposeFunctions();
 		tick();
 		setTimeout(buyShinyTick, DELAY_START_CMD);
+		setTimeout(evoStoneTick, DELAY_START_CMD);
 	})();
 })();
