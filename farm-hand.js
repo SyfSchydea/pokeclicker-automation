@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.31
+// @version      1.32
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -972,6 +972,7 @@
 		{target: "Qualot", parents: ["Pinap", "Mago"]},
 		{target: "Hondew", parents: ["Aguav", "Figy", "Wiki"]},
 		{target: "Rindo",  parents: ["Cheri", "Aguav"]},
+		{target: "Coba",   parents: ["Aguav", "Wiki"]},
 	];
 
 	/**
