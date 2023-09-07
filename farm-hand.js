@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.32
+// @version      1.32.0.1
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -1477,16 +1477,6 @@
 			}
 
 			return DELAY_IDLE;
-		}
-	}
-
-	/**
-	 * Mutation task for mutations which require 3 of a given parent berry around an empty spot.
-	 */
-	class ThreeBerryGrowMutationTask extends FullFieldMutationTask {
-		performAction() {
-			// Harvest anything that isn't parentBerry
-			// 
 		}
 	}
 
