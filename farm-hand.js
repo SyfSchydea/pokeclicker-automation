@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.32.0.1
+// @version      1.33
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -275,6 +275,17 @@
 		},
 
 		/**
+		 * Look up how many berries are harvested when a mature plant of the given berry is harvested.
+		 *
+		 * @param name {string} - Name of berry to look up.
+		 * @return     {number} - Number of berries harvested.
+		 */
+		getBerryHarvestAmount(name) {
+			const id = this._lookupBerry(name);
+			return this._getFarmingModule().berryData[id].harvestAmount;
+		},
+
+		/**
 		 * Not required by interface.
 		 * Cached list of berries able to spread. Used by berryCanSpread.
 		 */
@@ -346,7 +357,8 @@
 		 * Choose a berry which may be farmed, but which the player owns the least of.
 		 *
 		 * @param excludeSpecial {boolean} - Set to true to avoid returning berries which require
-		 *                                   non-standard farming methods. Currently Kasib and Kebia.
+		 *                                   non-standard farming methods. Currently Kasib and Kebia,
+		 *                                   and other berries with harvestAmount=1 if the player has Passhos.
 		 * @param maxMaturation  {number}  - Maximum number of seconds to maturation to allow in a returned berry.
 		 *                                   Negative to ignore maturation time.
 		 * @return           {string|null} - Name of a berry to farm, or null if there are no suitable berries.
@@ -355,11 +367,12 @@
 			const SPECIAL_BERRIES = [BerryType.Kasib, BerryType.Kebia];
 
 			const farming = App.game.farming;
+			const harvestAmountRequirement = !excludeSpecial && this.getBerryAmount("Passho") >= 25? 1 : 2;
 
 			let validBerries = farming.berryData
 				// Only take berries which yield more from harvesting (eg. Lum does not)
 				// plus Kasib and Kebia berries as exceptions
-				.filter(b => (b.harvestAmount > 1
+				.filter(b => (b.harvestAmount >= harvestAmountRequirement
 						|| (!excludeSpecial && SPECIAL_BERRIES.includes(b.type)))
 					&& (maxMaturation < 0 || b.growthTime[GROWTH_STAGE_MATURE] <= maxMaturation))
 
@@ -1187,7 +1200,24 @@
 
 				// Other berries may be farmed simply by planting and reharvesting them.
 				default:
-					if (useWacans) {
+					const usePassho = page.getBerryHarvestAmount(targetBerry) <= 1;
+
+					if (usePassho) {
+						plantingPhases.push({
+							berry: "Passho",
+							plots: SURROUND_LAYOUT[1],
+						}, {
+							berry: targetBerry,
+							plots: SURROUND_LAYOUT[0],
+						});
+						harvestingPhases.push({
+							exceptBerries: ["Passho"],
+							plots: SURROUND_LAYOUT[1],
+						}, {
+							plots: SURROUND_LAYOUT[0],
+						});
+
+					} else if (useWacans) {
 						plantingPhases.push({
 							berry: targetBerry,
 							plots: WACAN_LAYOUT[0],
