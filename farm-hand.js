@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.33
+// @version      1.34
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -124,6 +124,17 @@
 			}
 
 			return plot.age;
+		},
+
+		/**
+		 * Find the amount which will be harvested from the given plot,
+		 * taking into account any modifiers.
+		 *
+		 * @param plotId {number} - Index of the plot to look up.
+		 * @return       {number} - Number of berries produced on harvest.
+		 */
+		getPlotHarvestAmount(plotId) {
+			return this._getPlot(plotId).harvestAmount();
 		},
 
 		/**
@@ -1049,10 +1060,18 @@
 
 		for (const i of plots) {
 			const berry = page.getBerryInPlot(i);
-			if (!exceptBerries.includes(berry)
-					&& (!options.onlyBerries || options.onlyBerries.includes(berry))
-					&& (harvestPlot(i)
-						|| (options.force && page.forceRemovePlot(i)))) {
+
+			if (exceptBerries.includes(berry)
+					|| (options.onlyBerries && !options.onlyBerries.includes(berry))) {
+				continue;
+			}
+
+			if (typeof options.minHarvestAmount == "number"
+					&& page.getPlotHarvestAmount(i) < options.minHarvestAmount) {
+				continue;
+			}
+
+			if (harvestPlot(i) || (options.force && page.forceRemovePlot(i))) {
 				return i;
 			}
 		}
@@ -1214,7 +1233,12 @@
 							exceptBerries: ["Passho"],
 							plots: SURROUND_LAYOUT[1],
 						}, {
+							exceptBerries: [targetBerry],
 							plots: SURROUND_LAYOUT[0],
+						}, {
+							onlyBerries: [targetBerry],
+							plots: SURROUND_LAYOUT[0],
+							minHarvestAmount: 2,
 						});
 
 					} else if (useWacans) {
