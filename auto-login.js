@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Login
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.6
 // @description  Automatically re-logs in, if you refresh
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -248,6 +248,90 @@
 			ItemHandler.amountSelected(1);
 			ItemHandler.useStones();
 		},
+
+		/**
+		 * Find a temporary battle which allows the player to capture the given pokemon.
+		 * Should only return battles which the player has unlocked and has access to now.
+		 *
+		 * @param pkmn {string}      - Name of the pokemon to look up.
+		 * @return     {string|null} - Id of the temporary battle, or null if no battle is found.
+		 */
+		findTempBattle(pkmn) {
+			for (const [id, battle] of Object.entries(TemporaryBattleList)) {
+				if (battle.optionalArgs.isTrainerBattle || !battle.isVisible()) {
+					continue;
+				}
+
+				for (const battleMon of battle.pokemons) {
+					if (battleMon.name == pkmn) {
+						return id;
+					}
+				}
+			}
+
+			return null;
+		},
+
+		/**
+		 * Attempt to enter the given temporary battle.
+		 *
+		 * @param battleName {string} - Name of temporary battle to enter.
+		 */
+		enterTempBattle(battleName) {
+			const battle = TemporaryBattleList[battleName];
+
+			if (!battle.parent || (battle.parent.region == player.region
+					&& battle.parent.subregion == player.subregion)) {
+				battle.protectedOnclick();
+			}
+		},
+
+		/**
+		 * Find the id of the region which holds the given temporary battle.
+		 *
+		 * @param battleName {string} - Name of temporary battle to look up.
+		 * @return           {number} - Id of the region this battle is in.
+		 */
+		getTempBattleRegion(battleName) {
+			return TemporaryBattleList[battleName].parent?.region;
+		},
+
+		/**
+		 * Find the id of the subregion which holds the given temporary battle.
+		 *
+		 * @param battleName {string} - Name of temporary battle to look up.
+		 * @return           {number} - Id of the subregion this battle is in.
+		 */
+		getTempBattleSubRegion(battleName) {
+			return TemporaryBattleList[battleName].parent?.subregion;
+		},
+
+		/**
+		 * Find the id of the region which the player is in.
+		 *
+		 * @return {number} - Id of the region the player is in.
+		 */
+		getTempBattleRegion(battleName) {
+			return player.region;
+		},
+
+		/**
+		 * Find the id of the subregion which the player is in.
+		 *
+		 * @return {number} - Id of the subregion the player is in.
+		 */
+		getTempBattleSubRegion(battleName) {
+			return player.subregion;
+		},
+
+		/**
+		 * Check if we're currently in a battle with a shiny pokemon.
+		 *
+		 * @return - Truthy if in a battle with a shiny, falsey if not.
+		 */
+		battlingShiny() {
+			return Battle.enemyPokemon()?.shiny;
+		},
 	};
 
 	//////////////////////////
@@ -479,6 +563,60 @@
 				"from using a", stoneName, "on", basePkmnName);
 	}
 
+	function validateBattleRegion(battleName) {
+		const region = page.getTempBattleRegion(battleName);
+		if (region != null && region != page.getPlayerRegion()) {
+			return false;
+		}
+
+		const subregion = page.getTempBattleSubRegion(battleName);
+		if (subregion != null && subregion != page.getPlayerSubRegion()) {
+			return false;
+		}
+
+		return true;
+	}
+
+	let tempBattleShiny = null;
+
+	function tempShinyTick() {
+		if (page.battlingShiny()) {
+			console.log("Found a shiny!");
+			tempBattleShiny = null;
+			return;
+		}
+
+		const battleName = page.findTempBattle(tempBattleShiny);
+		if (!battleName || !validateBattleRegion(battleName)) {
+			console.error("Failed to find valid temporary battle");
+			tempBattleShiny = null;
+			return;
+		}
+
+		page.enterTempBattle(battleName);
+		setTimeout(tempShinyTick, DELAY_BUY);
+	}
+
+	function cmdTempShiny(pkmnName) {
+		const pkmn = page.normalisePokemonName(pkmnName);
+		if (!pkmn) {
+			throw new Error(`Failed to find pokemon '${pkmnName}'`);
+		}
+
+		const battleName = page.findTempBattle(pkmn);
+		if (!battleName) {
+			throw new Error("Failed to find battle for " + pkmn);
+		}
+
+		if (!validateBattleRegion(battleName)) {
+			throw new Error("You're not in the right region to fight " + pkmn);
+		}
+
+		tempBattleShiny = pkmn;
+		setTimeout(tempShinyTick, DELAY_START_CMD);
+		console.log("Grinding temporary battles for a shiny", pkmn);
+	}
+
 	function exposeFunctions() {
 		if (!window.syfScripts) {
 			window.syfScripts = {};
@@ -492,6 +630,7 @@
 		window[GRIND_WINDOW_KEY] = {
 			buyShiny: cmdBuyShiny,
 			evoStoneShiny: cmdEvoStone,
+			tempBattleShiny: cmdTempShiny,
 		};
 	}
 
