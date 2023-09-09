@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.34
+// @version      1.35
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -1161,32 +1161,6 @@
 					}
 					break;
 				}
-
-				// Habans should be grown spread
-				// out since they slow down
-				// surrounding plants
-				case "Haban":
-					plantingPhases.push({
-						berry: targetBerry,
-						plots: ALONE_LAYOUT[0],
-					},
-
-					// Wacans are planted in the
-					// remaining spaces to speed
-					// up growth.
-					{
-						berry: "Wacan",
-						plots: ALONE_LAYOUT[1],
-					});
-
-					harvestingPhases.push({
-						plots: ALONE_LAYOUT[0],
-					}, {
-						exceptBerries: ["Wacan"],
-						plots: ALONE_LAYOUT[1],
-					});
-
-					break;
 
 				// Kebias are parasitic, and may only be farmed by allowing them to overtake other berries.
 				case "Kebia":
