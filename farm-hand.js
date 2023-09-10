@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.35
+// @version      1.36
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -653,8 +653,11 @@
 			// Filter for mutations of the right type...
 			const mutation = farming.mutations.find(m => m instanceof GrowNearBerryMutation
 
-					// And which require 4 or fewer parent berries...
-					&& m.berryReqs.length <= 4
+					// And which we've actually unlocked
+					&& m.unlocked
+
+					// And which require 8 or fewer parent berries...
+					&& m.berryReqs.length <= 8
 
 					// And which we haven't already done...
 					&& farming.berryList[m.mutatedBerry]() == 0
@@ -934,6 +937,22 @@
 		-1, -1, -1, -1, -1,
 		 1, -1,  0, -1,  1,
 		 3, -1,  2, -1,  3,
+	];
+
+	GROW_MUTATION_LAYOUTS[7] = [
+		4, -1,  6, -1,  4,
+		3, -1,  5, -1,  3,
+		2,  1,  0,  1,  2,
+		3, -1,  5, -1,  3,
+		4, -1,  6, -1,  4,
+	];
+
+	GROW_MUTATION_LAYOUTS[8] = [
+		0,  1,  3,  1,  0,
+		2, -1,  5, -1,  2,
+		4,  6,  7,  6,  4,
+		2, -1,  5, -1,  2,
+		0,  1,  3,  1,  0,
 	];
 
 	// Reformat the above layouts into one which may
