@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Digger
 // @namespace    http://tampermonkey.net/
-// @version      1.6.1
+// @version      1.6.2
 // @description  Automates digging underground in Pokéclicker.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -517,10 +517,10 @@
 			return false;
 		}
 
-		// If the floor contains only gem plates, skip it.
+		// If the floor contains only gem plates and shards, skip it.
 		return (survey.fossils <= 0 && survey.fossilpieces <= 0
 				&& survey.evoItems <=0 && survey.totalValue <= 0
-				&& survey.shards <= 0 && survey.megaStones <= 0);
+				&& survey.megaStones <= 0);
 	}
 
 	/**
