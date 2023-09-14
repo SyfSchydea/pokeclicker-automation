@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.4.2
+// @version      0.4.3
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -157,7 +157,7 @@
 			return setTimeout(tick, DELAY_COLLECT);
 		}
 
-		setTimout(tick, DELAY_IDLE);
+		setTimeout(tick, DELAY_IDLE);
 	}
 
 	/**
