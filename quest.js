@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.2
+// @version      0.3
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -31,6 +31,15 @@
 		 */
 		gameLoaded() {
 			return App?.game;
+		},
+
+		/**
+		 * Fetch the save key of the currently loaded save.
+		 *
+		 * @return {string} - Save key if currently logged in, or an empty string if not.
+		 */
+		getSaveKey() {
+			return Save.key;
 		},
 
 		/**
@@ -75,9 +84,57 @@
 	 * through the page interface defined above.
 	 */
 
+	const WINDOW_KEY = "autoQuest";
+
 	const DELAY_INIT    =  5 * 1000;
 	const DELAY_IDLE    = 10 * 1000;
 	const DELAY_COLLECT =       500;
+
+	// TODO: Can this be moved to some kind of library file?
+		// This is some code duplication from breeder.js
+	const SETTINGS_SCOPE_SAVE = {storage: localStorage,
+			getKey: () => "syfschydea--quest--settings--" + page.getSaveKey()};
+
+	/**
+	 * Holds info about a single value which exists in settings.
+	 */
+	class Setting {
+		constructor(scope, key, defaultVal) {
+			this.scope = scope;
+			this.key = key;
+			this.defaultVal = defaultVal;
+		}
+
+		_read() {
+			const settingsJson = this.scope.storage.getItem(
+					this.scope.getKey());
+
+			if (!settingsJson) {
+				return {};
+			}
+
+			return JSON.parse(settingsJSON);
+		}
+
+		get() {
+			const settings = this._read();
+
+			if (!(this.key in settings)) {
+				return this.defaultVal;
+			}
+
+			return settings[this.key];
+		}
+
+		set(val) {
+			const settings = this._read();
+			settings[this.key] = val;
+			this.scope.storage.setItem(this.scope.getKey(),
+					JSON.stringify(settings);
+		}
+	}
+
+	Setting.collectQuests = new Setting(SETTINGS_SCOPE_SAVE, "collect", false);
 
 	function collectCompletedQuest() {
 		const questCount = page.getActiveQuestCount();
@@ -96,15 +153,32 @@
 			return setTimeout(tick, DELAY_IDLE);
 		}
 
-		// TODO: Add setting if quests should be auto-completed. False by default
-		if (collectCompletedQuest()) {
+		if (Setting.collect.get() && collectCompletedQuest()) {
 			return setTimeout(tick, DELAY_COLLECT);
 		}
 
 		setTimout(tick, DELAY_IDLE);
 	}
 
+	/**
+	 * User-facing command.
+	 * Set if the script should collect completed quests automatically or not.
+	 *
+	 * @param collect - Truthy to collect quests, falsey to not.
+	 */
+	function cmdSetCollect(collect=true) {
+		Setting.collect.set(!!collect);
+		console.log((collect? "Started" : "Stopped"), "collecting completed quests");
+	}
+
+	function exposeCommands() {
+		window[WINDOW_KEY] = {
+			collectQuests: cmdSetCollect,
+		};
+	}
+
 	(function main() {
 		setTimeout(tick, DELAY_INIT);
+		exposeCommands();
 	})();
 })();
