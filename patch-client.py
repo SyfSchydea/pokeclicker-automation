@@ -12,6 +12,7 @@ SCRIPT_SOURCE_FILES = [
 	"gym.js",
 	"safari.js",
 	"auto-login.js",
+	"quest.js",
 ]
 
 # relative to game's home directory
