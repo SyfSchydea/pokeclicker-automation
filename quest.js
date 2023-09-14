@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.4.1
+// @version      0.4.2
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -153,7 +153,7 @@
 			return setTimeout(tick, DELAY_IDLE);
 		}
 
-		if (Setting.collect.get() && collectCompletedQuest()) {
+		if (Setting.collectQuests.get() && collectCompletedQuest()) {
 			return setTimeout(tick, DELAY_COLLECT);
 		}
 
@@ -167,7 +167,7 @@
 	 * @param collect - Truthy to collect quests, falsey to not.
 	 */
 	function cmdSetCollect(collect=true) {
-		Setting.collect.set(!!collect);
+		Setting.collectQuests.set(!!collect);
 		console.log((collect? "Started" : "Stopped"), "collecting completed quests");
 	}
 
