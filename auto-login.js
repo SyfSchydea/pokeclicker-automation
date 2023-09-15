@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Login
 // @namespace    http://tampermonkey.net/
-// @version      1.6.1
+// @version      1.6.1+rebattle-temp-1
 // @description  Automatically re-logs in, if you refresh
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -578,12 +578,24 @@
 	}
 
 	let tempBattleShiny = null;
+	let inShinyTempBattle = false;
 
 	function tempShinyTick() {
-		if (page.battlingShiny()) {
-			console.log("Found a shiny!");
+		if (page.hasShiny(tempBattleShiny) {
+			console.log("Caught it!");
 			tempBattleShiny = null;
 			return;
+		}
+
+		if (page.battlingShiny()) {
+			if (!inShinyTempBattle) {
+				console.log("Found a shiny...");
+				inShinyTempBattle = true;
+			}
+
+			return setTimeout(tempShinyTick, DELAY_WAIT);
+		} else {
+			inShinyTempBattle = false;
 		}
 
 		const battleName = page.findTempBattle(tempBattleShiny);
@@ -601,6 +613,10 @@
 		const pkmn = page.normalisePokemonName(pkmnName);
 		if (!pkmn) {
 			throw new Error(`Failed to find pokemon '${pkmnName}'`);
+		}
+
+		if (page.hasShiny(pkmn)) {
+			throw new Error("You've already caught a shiny " + pkmn);
 		}
 
 		const battleName = page.findTempBattle(pkmn);
