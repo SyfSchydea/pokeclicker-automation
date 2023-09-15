@@ -581,7 +581,7 @@
 	let inShinyTempBattle = false;
 
 	function tempShinyTick() {
-		if (page.hasShiny(tempBattleShiny) {
+		if (page.hasShiny(tempBattleShiny)) {
 			console.log("Caught it!");
 			tempBattleShiny = null;
 			return;
