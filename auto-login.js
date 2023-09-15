@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Login
 // @namespace    http://tampermonkey.net/
-// @version      1.6
+// @version      1.6.1
 // @description  Automatically re-logs in, if you refresh
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -311,7 +311,7 @@
 		 *
 		 * @return {number} - Id of the region the player is in.
 		 */
-		getTempBattleRegion(battleName) {
+		getPlayerRegion(battleName) {
 			return player.region;
 		},
 
@@ -320,7 +320,7 @@
 		 *
 		 * @return {number} - Id of the subregion the player is in.
 		 */
-		getTempBattleSubRegion(battleName) {
+		getPlayerSubRegion(battleName) {
 			return player.subregion;
 		},
 
