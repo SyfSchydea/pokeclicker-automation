@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.36
+// @version      1.36.1
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -1903,6 +1903,10 @@
 		 * Fetch the planting layout to use for this mutation, or undefined if there is no preset layout to use.
 		 */
 		getPlantingLayout() {
+			if (!page.allPlotsUnlocked()) {
+				return undefined;
+			}
+
 			return GROW_MUTATION_PLOTS[this.parentBerries.length];
 		}
 
