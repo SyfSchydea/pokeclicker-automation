@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.36.1+jaboca-1
+// @version      1.36.1+jaboca-2
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -1711,7 +1711,7 @@
 
 	// Maintain a given number of a given berry on the field,
 	// without caring about layout
-	function FieldBerryCountAction {
+	class FieldBerryCountAction {
 		constructor(berry, amount) {
 			this.berry = berry;
 			this.amount = amount;
