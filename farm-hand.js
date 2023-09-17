@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.36.1
+// @version      1.36.2
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -1925,20 +1925,22 @@
 			const plantingLayout = this.getPlantingLayout();
 
 			// Harvest or remove any spreading parent berries in the wrong place
-			for (let b = 0; b < this.parentBerries.length; ++b) {
-				const berry = this.parentBerries[b];
-				if (!page.berryCanSpread(berry.name)) {
-					continue;
-				}
+			if(plantingLayout) {
+				for (let b = 0; b < this.parentBerries.length; ++b) {
+					const berry = this.parentBerries[b];
+					if (!page.berryCanSpread(berry.name)) {
+						continue;
+					}
 
-				const berryPlots = plantingLayout[b];
+					const berryPlots = plantingLayout[b];
 
-				for (let p = 0; p < PAGE_PLOT_COUNT; ++p) {
-					// If the berry is present in this spot, but it shouldn't be, remove it
-					if (!berryPlots.includes(p) && page.getBerryInPlot(p) == berry.name) {
-						if (page.forceRemovePlot(p)) {
-							managedPlots[p] = false;
-							return DELAY_HARVEST;
+					for (let p = 0; p < PAGE_PLOT_COUNT; ++p) {
+						// If the berry is present in this spot, but it shouldn't be, remove it
+						if (!berryPlots.includes(p) && page.getBerryInPlot(p) == berry.name) {
+							if (page.forceRemovePlot(p)) {
+								managedPlots[p] = false;
+								return DELAY_HARVEST;
+							}
 						}
 					}
 				}
