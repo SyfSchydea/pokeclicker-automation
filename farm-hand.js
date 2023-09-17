@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.36.1+jaboca-3
+// @version      1.36.1+jaboca-4
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -854,6 +854,11 @@
 
 				// Find a suitable berry to use as a parent berry
 				for (const parentBerry of farming.berryData) {
+					// Check we have enough of the parent
+					if (farming.berryList[parentBerry.type]() < PAGE_PLOT_COUNT) {
+						continue;
+					}
+
 					let amount = PAGE_PLOT_COUNT - 1;
 					if (!checkFlavours(parentBerry, amount)) {
 						continue;
