@@ -844,7 +844,7 @@
 				// to satisfy the flavour requirements
 				function checkFlavours(berry, amt) {
 					for (let i = 0; i < flavourReqs.length; ++i) {
-						if (berry.flavors[i] * amt < flavourReqs[i]) {
+						if (berry.flavors[i].value * amt < flavourReqs[i]) {
 							return false;
 						}
 					}
