@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.37
+// @version      1.37.1
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -664,7 +664,11 @@
 					&& !this._isBerryIdOnField(m.mutatedBerry)
 
 					// And which we have enough of the parent berries
-					&& m.berryReqs.every(b => farming.berryList[b]() > 25));
+					&& m.berryReqs.every(b => farming.berryList[b]() > 25)
+
+					// And which won't cause problems with spreading
+					&& (this.allPlotsUnlocked()
+						|| m.berryReqs.every(b => !this.berryCanSpread(this._lookupBerry(b)))));
 
 			if (!mutation) {
 				return null;
