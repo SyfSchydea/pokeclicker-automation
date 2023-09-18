@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.36.2
+// @version      1.36.2+jaboca-4
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -803,6 +803,84 @@
 		},
 
 		/**
+		 * Find a berry which may be usefully mutated by several of another berry anywhere in the field.
+		 *
+		 * @return {{
+		 *   targetBerry: string,
+		 *   parentBerry: string,
+		 *   amount: number,
+		 * }} - Object containing the names of the target and parent
+		 *      berries, and the number of parent berries required for the mutation.
+		 *      Null if there are no suitable mutations.
+		 */
+		getEligibleFieldFlavourMutation() {
+			const farming = this._getFarmingModule();
+			if (!farming) {
+				return null;
+			}
+
+			for (const m of farming.mutations) {
+				// Filter for mutations of the right type...
+				if (!(m instanceof FieldFlavorMutation)) {
+					continue;
+				}
+
+				// And which we've unlocked...
+				if (!m.unlocked) {
+					continue;
+				}
+
+				// And which we haven't already done...
+				if (farming.berryList[m.mutatedBerry]() > 0
+						|| this._isBerryIdOnField(m.mutatedBerry)) {
+					continue;
+				}
+
+				// Get the required flavours assuming all berries are fully grown
+				const flavourReqs = m.fieldFlavor.map(
+						(f, i) => f / (m.flavorRatio[i] || 1));
+
+				// Check if the given amount of berries is enough
+				// to satisfy the flavour requirements
+				function checkFlavours(berry, amt) {
+					for (let i = 0; i < flavourReqs.length; ++i) {
+						if (berry.flavors[i].value * amt < flavourReqs[i]) {
+							return false;
+						}
+					}
+
+					return true;
+				}
+
+				// Find a suitable berry to use as a parent berry
+				for (const parentBerry of farming.berryData) {
+					// Check we have enough of the parent
+					if (farming.berryList[parentBerry.type]() < PAGE_PLOT_COUNT) {
+						continue;
+					}
+
+					let amount = PAGE_PLOT_COUNT - 1;
+					if (!checkFlavours(parentBerry, amount)) {
+						continue;
+					}
+
+					// Repeat to see how many berries are actually needed
+					while (checkFlavours(parentBerry, amount - 1)) {
+						amount -= 1;
+					}
+
+					return {
+						targetBerry: this._lookupBerry(m.mutatedBerry),
+						parentBerry: this._lookupBerry(parentBerry.type),
+						amount,
+					};
+				}
+			}
+
+			return null;
+		},
+
+		/**
 		 * Check if the player has unlocked all plots in the farm.
 		 *
 		 * @return - Truthy if all plots are unlocked. Falsey if not.
@@ -1527,6 +1605,19 @@
 		}
 	}
 
+	// Count how many of the given berry are on the field
+	function countBerries(berry) {
+		let count = 0;
+
+		for (let i = 0; i < PAGE_PLOT_COUNT; ++i) {
+			if (page.getBerryInPlot(i) == berry) {
+				count += 1;
+			}
+		}
+
+		return count;
+	}
+
 	class GenericTask {
 		constructor(priority, expirationPolicy, actionPolicy) {
 			this.priority = priority;
@@ -1574,6 +1665,18 @@
 		}
 	}
 
+	// Expire when the given berry is unlocked/obtained
+	class BerryUnlockExpiration {
+		constructor(berry) {
+			this.berry = berry;
+		}
+
+		hasExpired() {
+			return (page.getBerryAmount(this.berry) > 0
+					|| page.isBerryOnField(this.berry));
+		}
+	}
+
 	class PlotUnlockAction {
 		constructor(plotIdx) {
 			this.plotIdx = plotIdx;
@@ -1611,6 +1714,30 @@
 		}
 	}
 
+	// Maintain a given number of a given berry on the field,
+	// without caring about layout
+	class FieldBerryCountAction {
+		constructor(berry, amount) {
+			this.berry = berry;
+			this.amount = amount;
+		}
+
+		performAction() {
+			// Plant one if there aren't enough
+			if (countBerries(this.berry) < this.amount
+					&& plantOne(this.berry) != null) {
+				return DELAY_PLANT;
+			}
+
+			// Harvest anything else
+			if (harvestOne({exceptBerries: [this.berry]}) != null) {
+				return DELAY_HARVEST;
+			}
+
+			return DELAY_IDLE;
+		}
+	}
+
 	function makePlotUnlockTask(plotIdx) {
 		return new GenericTask(PRIORITY_PLOT_UNLOCK,
 				new PlotUnlockExpiration(plotIdx),
@@ -1621,6 +1748,12 @@
 		return new GenericTask(PRIORITY_USER,
 				new TimedExpiration(expiration),
 				new FullFieldAction(berry));
+	}
+
+	function makeFieldMutationTask(targetBerry, parentBerry, amount) {
+		return new GenericTask(PRIORITY_MUTATION,
+				new BerryUnlockExpiration(targetBerry),
+				new FieldBerryCountAction(parentBerry, amount));
 	}
 
 	/**
@@ -2204,6 +2337,20 @@
 						evolveNearBerryMutation.targetBerry,
 						evolveNearBerryMutation.parentBerry,
 						evolveNearBerryMutation.catalystBerry);
+				priority = currentTask.priority;
+				break mutationTasks;
+			}
+
+			const fieldFlavourMutation = page.getEligibleFieldFlavourMutation();
+			if (fieldFlavourMutation) {
+				console.log("Farming to grow",
+					fieldFlavourMutation.amount,
+					fieldFlavourMutation.parentBerry, "into",
+					fieldFlavourMutation.targetBerry);
+				currentTask = makeFieldMutationTask(
+					fieldFlavourMutation.targetBerry,
+					fieldFlavourMutation.parentBerry,
+					fieldFlavourMutation.amount);
 				priority = currentTask.priority;
 				break mutationTasks;
 			}
