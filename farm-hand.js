@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.37.1
+// @version      1.37.1+chilan
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -566,6 +566,52 @@
 					if (berryFlavour < min || berryFlavour > max) {
 						continue mutationLoop;
 					}
+				}
+
+				return {
+					targetBerry: this._lookupBerry(mutation.mutatedBerry),
+					parentBerry: this._lookupBerry(mutation.originalBerry),
+				};
+			}
+
+			return null;
+		},
+
+		/**
+		 * Find a mutation which may be achieved by farming a full field of one berry.
+		 * Note that this excludes evolve-near-flavour mutations for spaghetti related reasons.
+		 *
+		 * @return {{targetBerry: string, parentBerry: string}} - Object containing the names of the
+		 *                                                        target and parent berries. Null if
+		 *                                                        there are no suitable mutations.
+		 */
+		getEligibleFullFieldMutation() {
+			const farming = this._getFarmingModule();
+			if (!farming) {
+				return null;
+			}
+
+			for (const mutation of farming.mutations) {
+				if (!(mutation instanceof EvolveNearBerryMinMutation)) {
+					continue;
+				}
+
+				if (farming.berryList[mutation.mutatedBerry]() > 0
+						|| this._isBerryIdOnField(mutation.mutatedBerry)) {
+					continue;
+				}
+
+				if (!mutation.unlocked) {
+					continue;
+				}
+
+				if (farming.berryList[mutation.originalBerry]() < 26) {
+					continue;
+				}
+
+				const berryReqs = Object.entries(mutation.berryReqs);
+				if (berryReqs.length > 1 || berryReqs[0][0] != mutation.originalBerry) {
+					continue;
 				}
 
 				return {
@@ -2273,10 +2319,10 @@
 		}
 
 		mutationTasks: if (priority < PRIORITY_MUTATION) {
-			const flavourEvolve = page.getEligibleFlavourEvolveMutation();
-			if (flavourEvolve) {
-				console.log("Farming to evolve", flavourEvolve.parentBerry, "into", flavourEvolve.targetBerry);
-				currentTask = new FullFieldMutationTask(flavourEvolve.parentBerry, flavourEvolve.targetBerry);
+			const fieldEvolve = page.getEligibleFlavourEvolveMutation() || page.getEligibleFullFieldMutation();
+			if (fieldEvolve) {
+				console.log("Farming to evolve", fieldEvolve.parentBerry, "into", fieldEvolve.targetBerry);
+				currentTask = new FullFieldMutationTask(fieldEvolve.parentBerry, fieldEvolve.targetBerry);
 				priority = currentTask.priority;
 				break mutationTasks;
 			}
