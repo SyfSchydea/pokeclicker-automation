@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.38.1
+// @version      1.38.2
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -1277,8 +1277,8 @@
 		}
 
 		performAction() {
-			const trueTargetBerry = this.targetBerry;
 			const targetBerry = this.getTargetBerry();
+			const trueTargetBerry = this.targetBerry || targetBerry;
 			const plantingPhases = [];
 			const harvestingPhases = [];
 			const useWacans = targetBerry != "Wacan" && page.getBerryAmount("Wacan") > 10;
