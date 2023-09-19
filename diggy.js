@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Digger
 // @namespace    http://tampermonkey.net/
-// @version      1.6.2
+// @version      1.6.3
 // @description  Automates digging underground in Pokéclicker.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -383,7 +383,7 @@
 	const DELAY_INIT      =      1000;
 	const DELAY_NO_TASK   = 60 * 1000;
 
-	const TARGET_DIAMOND_VALUE = 1000;
+	const TARGET_DIAMOND_VALUE = 3000;
 
 	/**
 	 * Compare two {x, y} position objects.
