@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.38
+// @version      1.38.1
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -1277,6 +1277,7 @@
 		}
 
 		performAction() {
+			const trueTargetBerry = this.targetBerry;
 			const targetBerry = this.getTargetBerry();
 			const plantingPhases = [];
 			const harvestingPhases = [];
@@ -1340,7 +1341,7 @@
 
 				// Other berries may be farmed simply by planting and reharvesting them.
 				default:
-					const usePassho = page.getBerryHarvestAmount(targetBerry) <= 1;
+					const usePassho = page.getBerryHarvestAmount(trueTargetBerry) <= 1;
 
 					if (usePassho) {
 						plantingPhases.push({
@@ -1354,10 +1355,10 @@
 							exceptBerries: ["Passho"],
 							plots: SURROUND_LAYOUT[1],
 						}, {
-							exceptBerries: [targetBerry],
+							exceptBerries: [targetBerry, trueTargetBerry],
 							plots: SURROUND_LAYOUT[0],
 						}, {
-							onlyBerries: [targetBerry],
+							onlyBerries: [targetBerry, trueTargetBerry],
 							plots: SURROUND_LAYOUT[0],
 							minHarvestAmount: 2,
 						});
