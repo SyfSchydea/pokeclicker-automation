@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.4.4
+// @version      0.4.5
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -84,7 +84,7 @@
 	 * through the page interface defined above.
 	 */
 
-	const WINDOW_KEY = "autoQuest";
+	const WINDOW_KEY = "quest";
 
 	const DELAY_INIT    =  5 * 1000;
 	const DELAY_IDLE    = 10 * 1000;
