@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.4.5
+// @version      0.4.6
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -57,21 +57,32 @@
 		 * Check if the given active quest has been completed,
 		 * and is waiting to be collected.
 		 *
-		 * @param questIdx {number} - Index of the active quest to query.
-		 * @return                  - Truthy if the quest is completed,
-		 *                            falsey if not.
+		 * @param activeQuestIdx {number} - Index of the active quest to query.
+		 * @return                        - Truthy if the quest is completed,
+		 *                                  falsey if not.
 		 */
-		activeQuestCompleted(questIdx) {
-			return App.game.quests.currentQuests()[questIdx].isCompleted();
+		activeQuestCompleted(activeQuestIdx) {
+			return App.game.quests.currentQuests()[activeQuestIdx].isCompleted();
+		},
+
+		/**
+		 * Convert an active quest index to a quest list index.
+		 *
+		 * @param activeQuestIdx {number} - Index of quest to look up in the list of active quests.
+		 * @return               {number} - Index of the same quest in the full list of quests.
+		 */
+		activeQuestIdxToQuestIdx(activeQuestIdx) {
+			return App.game.quests.currentQuests()[activeQuestIdx].index;
 		},
 
 		/**
 		 * Attempt to collect a completed quest.
 		 *
-		 * @param questIdx {number} - Index of the active quest to collect.
+		 * @param activeQuestIdx {number} - Index of the active quest to collect.
 		 */
-		collectQuest(questIdx) {
-			return App.game.quests.currentQuests()[questIdx].claim();
+		collectQuest(activeQuestIdx) {
+			const questIdx = this.activeQuestIdxToQuestIdx(activeQuestIdx);
+			App.game.quests.claimQuest(questIdx);
 		},
 	};
 
