@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.36
+// @version      1.38.2
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -578,6 +578,52 @@
 		},
 
 		/**
+		 * Find a mutation which may be achieved by farming a full field of one berry.
+		 * Note that this excludes evolve-near-flavour mutations for spaghetti related reasons.
+		 *
+		 * @return {{targetBerry: string, parentBerry: string}} - Object containing the names of the
+		 *                                                        target and parent berries. Null if
+		 *                                                        there are no suitable mutations.
+		 */
+		getEligibleFullFieldMutation() {
+			const farming = this._getFarmingModule();
+			if (!farming) {
+				return null;
+			}
+
+			for (const mutation of farming.mutations) {
+				if (!(mutation instanceof EvolveNearBerryMinMutation)) {
+					continue;
+				}
+
+				if (farming.berryList[mutation.mutatedBerry]() > 0
+						|| this._isBerryIdOnField(mutation.mutatedBerry)) {
+					continue;
+				}
+
+				if (!mutation.unlocked) {
+					continue;
+				}
+
+				if (farming.berryList[mutation.originalBerry]() < 26) {
+					continue;
+				}
+
+				const berryReqs = Object.entries(mutation.berryReqs);
+				if (berryReqs.length > 1 || berryReqs[0][0] != mutation.originalBerry) {
+					continue;
+				}
+
+				return {
+					targetBerry: this._lookupBerry(mutation.mutatedBerry),
+					parentBerry: this._lookupBerry(mutation.originalBerry),
+				};
+			}
+
+			return null;
+		},
+
+		/**
 		 * Find an evolve-near-berry mutation which is
 		 * eligible and useful to grind for.
 		 * Will only return mutations which use a single catalyst berry.
@@ -664,7 +710,11 @@
 					&& !this._isBerryIdOnField(m.mutatedBerry)
 
 					// And which we have enough of the parent berries
-					&& m.berryReqs.every(b => farming.berryList[b]() > 25));
+					&& m.berryReqs.every(b => farming.berryList[b]() > 25)
+
+					// And which won't cause problems with spreading
+					&& (this.allPlotsUnlocked()
+						|| m.berryReqs.every(b => !this.berryCanSpread(this._lookupBerry(b)))));
 
 			if (!mutation) {
 				return null;
@@ -800,6 +850,84 @@
 				targetBerry: this._lookupBerry(mutation.mutatedBerry),
 				parentBerry: this._lookupBerry(Object.keys(mutation.berryReqs)[0]),
 			};
+		},
+
+		/**
+		 * Find a berry which may be usefully mutated by several of another berry anywhere in the field.
+		 *
+		 * @return {{
+		 *   targetBerry: string,
+		 *   parentBerry: string,
+		 *   amount: number,
+		 * }} - Object containing the names of the target and parent
+		 *      berries, and the number of parent berries required for the mutation.
+		 *      Null if there are no suitable mutations.
+		 */
+		getEligibleFieldFlavourMutation() {
+			const farming = this._getFarmingModule();
+			if (!farming) {
+				return null;
+			}
+
+			for (const m of farming.mutations) {
+				// Filter for mutations of the right type...
+				if (!(m instanceof FieldFlavorMutation)) {
+					continue;
+				}
+
+				// And which we've unlocked...
+				if (!m.unlocked) {
+					continue;
+				}
+
+				// And which we haven't already done...
+				if (farming.berryList[m.mutatedBerry]() > 0
+						|| this._isBerryIdOnField(m.mutatedBerry)) {
+					continue;
+				}
+
+				// Get the required flavours assuming all berries are fully grown
+				const flavourReqs = m.fieldFlavor.map(
+						(f, i) => f / (m.flavorRatio[i] || 1));
+
+				// Check if the given amount of berries is enough
+				// to satisfy the flavour requirements
+				function checkFlavours(berry, amt) {
+					for (let i = 0; i < flavourReqs.length; ++i) {
+						if (berry.flavors[i].value * amt < flavourReqs[i]) {
+							return false;
+						}
+					}
+
+					return true;
+				}
+
+				// Find a suitable berry to use as a parent berry
+				for (const parentBerry of farming.berryData) {
+					// Check we have enough of the parent
+					if (farming.berryList[parentBerry.type]() < PAGE_PLOT_COUNT) {
+						continue;
+					}
+
+					let amount = PAGE_PLOT_COUNT - 1;
+					if (!checkFlavours(parentBerry, amount)) {
+						continue;
+					}
+
+					// Repeat to see how many berries are actually needed
+					while (checkFlavours(parentBerry, amount - 1)) {
+						amount -= 1;
+					}
+
+					return {
+						targetBerry: this._lookupBerry(m.mutatedBerry),
+						parentBerry: this._lookupBerry(parentBerry.type),
+						amount,
+					};
+				}
+			}
+
+			return null;
 		},
 
 		/**
@@ -1150,6 +1278,7 @@
 
 		performAction() {
 			const targetBerry = this.getTargetBerry();
+			const trueTargetBerry = this.targetBerry || targetBerry;
 			const plantingPhases = [];
 			const harvestingPhases = [];
 			const useWacans = targetBerry != "Wacan" && page.getBerryAmount("Wacan") > 10;
@@ -1212,7 +1341,7 @@
 
 				// Other berries may be farmed simply by planting and reharvesting them.
 				default:
-					const usePassho = page.getBerryHarvestAmount(targetBerry) <= 1;
+					const usePassho = page.getBerryHarvestAmount(trueTargetBerry) <= 1;
 
 					if (usePassho) {
 						plantingPhases.push({
@@ -1226,10 +1355,10 @@
 							exceptBerries: ["Passho"],
 							plots: SURROUND_LAYOUT[1],
 						}, {
-							exceptBerries: [targetBerry],
+							exceptBerries: [targetBerry, trueTargetBerry],
 							plots: SURROUND_LAYOUT[0],
 						}, {
-							onlyBerries: [targetBerry],
+							onlyBerries: [targetBerry, trueTargetBerry],
 							plots: SURROUND_LAYOUT[0],
 							minHarvestAmount: 2,
 						});
@@ -1527,6 +1656,19 @@
 		}
 	}
 
+	// Count how many of the given berry are on the field
+	function countBerries(berry) {
+		let count = 0;
+
+		for (let i = 0; i < PAGE_PLOT_COUNT; ++i) {
+			if (page.getBerryInPlot(i) == berry) {
+				count += 1;
+			}
+		}
+
+		return count;
+	}
+
 	class GenericTask {
 		constructor(priority, expirationPolicy, actionPolicy) {
 			this.priority = priority;
@@ -1574,6 +1716,18 @@
 		}
 	}
 
+	// Expire when the given berry is unlocked/obtained
+	class BerryUnlockExpiration {
+		constructor(berry) {
+			this.berry = berry;
+		}
+
+		hasExpired() {
+			return (page.getBerryAmount(this.berry) > 0
+					|| page.isBerryOnField(this.berry));
+		}
+	}
+
 	class PlotUnlockAction {
 		constructor(plotIdx) {
 			this.plotIdx = plotIdx;
@@ -1611,6 +1765,30 @@
 		}
 	}
 
+	// Maintain a given number of a given berry on the field,
+	// without caring about layout
+	class FieldBerryCountAction {
+		constructor(berry, amount) {
+			this.berry = berry;
+			this.amount = amount;
+		}
+
+		performAction() {
+			// Plant one if there aren't enough
+			if (countBerries(this.berry) < this.amount
+					&& plantOne(this.berry) != null) {
+				return DELAY_PLANT;
+			}
+
+			// Harvest anything else
+			if (harvestOne({exceptBerries: [this.berry]}) != null) {
+				return DELAY_HARVEST;
+			}
+
+			return DELAY_IDLE;
+		}
+	}
+
 	function makePlotUnlockTask(plotIdx) {
 		return new GenericTask(PRIORITY_PLOT_UNLOCK,
 				new PlotUnlockExpiration(plotIdx),
@@ -1621,6 +1799,12 @@
 		return new GenericTask(PRIORITY_USER,
 				new TimedExpiration(expiration),
 				new FullFieldAction(berry));
+	}
+
+	function makeFieldMutationTask(targetBerry, parentBerry, amount) {
+		return new GenericTask(PRIORITY_MUTATION,
+				new BerryUnlockExpiration(targetBerry),
+				new FieldBerryCountAction(parentBerry, amount));
 	}
 
 	/**
@@ -1903,6 +2087,10 @@
 		 * Fetch the planting layout to use for this mutation, or undefined if there is no preset layout to use.
 		 */
 		getPlantingLayout() {
+			if (!page.allPlotsUnlocked()) {
+				return undefined;
+			}
+
 			return GROW_MUTATION_PLOTS[this.parentBerries.length];
 		}
 
@@ -1921,20 +2109,22 @@
 			const plantingLayout = this.getPlantingLayout();
 
 			// Harvest or remove any spreading parent berries in the wrong place
-			for (let b = 0; b < this.parentBerries.length; ++b) {
-				const berry = this.parentBerries[b];
-				if (!page.berryCanSpread(berry.name)) {
-					continue;
-				}
+			if(plantingLayout) {
+				for (let b = 0; b < this.parentBerries.length; ++b) {
+					const berry = this.parentBerries[b];
+					if (!page.berryCanSpread(berry.name)) {
+						continue;
+					}
 
-				const berryPlots = plantingLayout[b];
+					const berryPlots = plantingLayout[b];
 
-				for (let p = 0; p < PAGE_PLOT_COUNT; ++p) {
-					// If the berry is present in this spot, but it shouldn't be, remove it
-					if (!berryPlots.includes(p) && page.getBerryInPlot(p) == berry.name) {
-						if (page.forceRemovePlot(p)) {
-							managedPlots[p] = false;
-							return DELAY_HARVEST;
+					for (let p = 0; p < PAGE_PLOT_COUNT; ++p) {
+						// If the berry is present in this spot, but it shouldn't be, remove it
+						if (!berryPlots.includes(p) && page.getBerryInPlot(p) == berry.name) {
+							if (page.forceRemovePlot(p)) {
+								managedPlots[p] = false;
+								return DELAY_HARVEST;
+							}
 						}
 					}
 				}
@@ -2130,10 +2320,10 @@
 		}
 
 		mutationTasks: if (priority < PRIORITY_MUTATION) {
-			const flavourEvolve = page.getEligibleFlavourEvolveMutation();
-			if (flavourEvolve) {
-				console.log("Farming to evolve", flavourEvolve.parentBerry, "into", flavourEvolve.targetBerry);
-				currentTask = new FullFieldMutationTask(flavourEvolve.parentBerry, flavourEvolve.targetBerry);
+			const fieldEvolve = page.getEligibleFlavourEvolveMutation() || page.getEligibleFullFieldMutation();
+			if (fieldEvolve) {
+				console.log("Farming to evolve", fieldEvolve.parentBerry, "into", fieldEvolve.targetBerry);
+				currentTask = new FullFieldMutationTask(fieldEvolve.parentBerry, fieldEvolve.targetBerry);
 				priority = currentTask.priority;
 				break mutationTasks;
 			}
@@ -2198,6 +2388,20 @@
 						evolveNearBerryMutation.targetBerry,
 						evolveNearBerryMutation.parentBerry,
 						evolveNearBerryMutation.catalystBerry);
+				priority = currentTask.priority;
+				break mutationTasks;
+			}
+
+			const fieldFlavourMutation = page.getEligibleFieldFlavourMutation();
+			if (fieldFlavourMutation) {
+				console.log("Farming to grow",
+					fieldFlavourMutation.amount,
+					fieldFlavourMutation.parentBerry, "into",
+					fieldFlavourMutation.targetBerry);
+				currentTask = makeFieldMutationTask(
+					fieldFlavourMutation.targetBerry,
+					fieldFlavourMutation.parentBerry,
+					fieldFlavourMutation.amount);
 				priority = currentTask.priority;
 				break mutationTasks;
 			}
