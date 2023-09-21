@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.6
+// @version      0.6.1
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -249,7 +249,7 @@
 			return false;
 		}
 
-		const quest = page.getQuestInfo(i);
+		const quest = page.getQuestInfo(questIdx);
 		switch (quest.type) {
 			case QuestType.POKEDOLLARS:
 				return true;
