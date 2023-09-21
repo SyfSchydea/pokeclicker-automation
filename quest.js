@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.6.1
+// @version      0.7
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -13,6 +13,7 @@
 
 	// Enum for types of quests encountered
 	const QuestType = {
+		BERRY:       "berry",
 		FARM_POINTS: "farm points",
 		POKEDOLLARS: "pokedollars",
 
@@ -125,6 +126,12 @@
 			const quest = this._getQuest(questIdx);
 
 			switch (quest.constructor) {
+				case HarvestBerriesQuest:
+					return {
+						type: QuestType.BERRY,
+						berry: BerryType[quest.berryType],
+					};
+
 				case GainFarmPointsQuest:
 					return {type: QuestType.FARM_POINTS};
 
@@ -256,6 +263,9 @@
 
 			case QuestType.FARM_POINTS:
 				return window.syfScripts?.farmHand?.canCompleteFarmPointQuest?.();
+
+			case QuestType.BERRY:
+				return window.syfScripts?.farmHand?.canCompleteBerryQuest?.(quest.berry);
 
 			default:
 				return false;
