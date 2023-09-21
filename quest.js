@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.4.6
+// @version      0.5
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -10,6 +10,14 @@
 
 (() => {
 	"use strict";
+
+	// Enum for types of quests encountered
+	const QuestType = {
+		POKEDOLLARS: "pokedollars",
+
+		// Any quest types not yet handled by the script
+		UNKNOWN:     "unknown",
+	};
 
 	///// Page Interface /////
 
@@ -40,6 +48,15 @@
 		 */
 		getSaveKey() {
 			return Save.key;
+		},
+
+		/**
+		 * Get the number of quests currently in the quest list.
+		 *
+		 * @return {number} - Number of quests active.
+		 */
+		getQuestCount() {
+			return App.game.quests.questList().length;
 		},
 
 		/**
@@ -80,9 +97,71 @@
 		 *
 		 * @param activeQuestIdx {number} - Index of the active quest to collect.
 		 */
-		collectQuest(activeQuestIdx) {
+		collectActiveQuest(activeQuestIdx) {
 			const questIdx = this.activeQuestIdxToQuestIdx(activeQuestIdx);
 			App.game.quests.claimQuest(questIdx);
+		},
+
+		/**
+		 * Not required by interface.
+		 * Fetch the given quest object from the quest list.
+		 *
+		 * @param questIdx {number} - Index of the quest to look up in the quest list.
+		 * @return         {Quest}  - Quest object for this quest.
+		 */
+		_getQuest(questIdx) {
+			return App.game.quests.questList()[questIdx];
+		},
+
+		/**
+		 * Look up details about the given quest from the list.
+		 * Returns an object containing at least a 'type' property.
+		 *
+		 * @param questIdx {number} - Index of the quest to look up in the quest list.
+		 * @return         {Object} - Object containing information about the quest.
+		 */
+		getQuestInfo(questIdx) {
+			const quest = this._getQuest(questIdx);
+
+			switch (quest.constructor) {
+				case GainMoneyQuest:
+					return {type: QuestType.POKEDOLLARS};
+
+				default;
+					return {type: QuestType.UNKNOWN};
+			}
+		},
+
+		/**
+		 * Attempt to start the given quest.
+		 *
+		 * @param questIdx {number} - Index of the quest to start.
+		 */
+		startQuest(questIdx) {
+			App.game.quests.beginQuest(questIdx);
+		},
+
+		/**
+		 * Check if the player can start any new quest.
+		 *
+		 * @return - Truthy if the player can start new quests. Falsey if not.
+		 */
+		canStartNewQuests() {
+			return App.game.quests.canStartNewQuest();
+		},
+
+		/**
+		 * Check if the given quest is eligible to be started.
+		 *
+		 * Note that this does not check if the player is able to start new quests in general.
+		 * Please use page.canStartNewQuests() for this.
+		 *
+		 * @param questIdx {number} - Index of the quest to look up in the quest list.
+		 * @return                  - Truthy if the player can this quest. Falsey if not.
+		 */
+		canStartQuest(questIdx) {
+			const quest = this._getQuest(questIdx);
+			return !quest.inProgress() && !quest.isCompleted();
 		},
 	};
 
@@ -97,9 +176,10 @@
 
 	const WINDOW_KEY = "quest";
 
-	const DELAY_INIT    =  5 * 1000;
-	const DELAY_IDLE    = 10 * 1000;
-	const DELAY_COLLECT =       500;
+	const DELAY_INIT        =  5 * 1000;
+	const DELAY_IDLE        = 10 * 1000;
+	const DELAY_COLLECT     =       500;
+	const DELAY_START_QUEST =      1000;
 
 	// TODO: Can this be moved to some kind of library file?
 		// This is some code duplication from breeder.js
@@ -146,12 +226,34 @@
 	}
 
 	Setting.collectQuests = new Setting(SETTINGS_SCOPE_SAVE, "collect", false);
+	Setting.startQuests   = new Setting(SETTINGS_SCOPE_SAVE, "startQuests", false);
 
 	function collectCompletedQuest() {
 		const questCount = page.getActiveQuestCount();
 		for (let i = 0; i < questCount; ++i) {
 			if (page.activeQuestCompleted(i)) {
-				page.collectQuest(i);
+				page.collectActiveQuest(i);
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	function startEligibleQuest() {
+		if (!page.canStartNewQuests()) {
+			return false;
+		}
+
+		const questCount = page.getQuestCount();
+		for (let i = 0; i < questCount; ++i) {
+			if (!page.canStartQuest(i)) {
+				continue;
+			}
+
+			const details = page.getQuestCount(i);
+			if (quest.type == QuestType.POKEDOLLARS) {
+				page.startQuest(i);
 				return true;
 			}
 		}
@@ -168,6 +270,10 @@
 			return setTimeout(tick, DELAY_COLLECT);
 		}
 
+		if (Setting.startQuests.get() && startEligibleQuest()) {
+			return setTimeout(tick, DELAY_START_QUEST);
+		}
+
 		setTimeout(tick, DELAY_IDLE);
 	}
 
@@ -182,9 +288,21 @@
 		console.log((collect? "Started" : "Stopped"), "collecting completed quests");
 	}
 
+	/**
+	 * User-facing command.
+	 * Set if the script should start new quests automatically or not.
+	 *
+	 * @param startQuests - Truthy to start quests, falsey to not.
+	 */
+	function cmdSetStartQuests(startQuests=true) {
+		Setting.startQuests.set(!!startQuests);
+		console.log((startQuests? "Began" : "Stopped"), "starting eligible quests");
+	}
+
 	function exposeCommands() {
 		window[WINDOW_KEY] = {
 			collectQuests: cmdSetCollect,
+			startQuests:   cmdSetStartQuests,
 		};
 	}
 
