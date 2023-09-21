@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.8
+// @version      0.8+shiny-quest
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -18,6 +18,7 @@
 		MINE_ITEMS:  "mine items",
 		MINE_LAYERS: "mine layers",
 		POKEDOLLARS: "pokedollars",
+		SHINY:       "shiny",
 
 		// Any quest types not yet handled by the script
 		UNKNOWN:     "unknown",
@@ -146,6 +147,9 @@
 				case MineLayersQuest:
 					return {type: QuestType.MINE_LAYERS};
 
+				case CatchShiniesQuest:
+					return {type: QuestType.SHINY};
+
 				default:
 					return {type: QuestType.UNKNOWN};
 			}
@@ -181,6 +185,36 @@
 		canStartQuest(questIdx) {
 			const quest = this._getQuest(questIdx);
 			return !quest.inProgress() && !quest.isCompleted();
+		},
+
+		/**
+		 * Check if the current pokeball settings will catch a shiny.
+		 *
+		 * @return - Truthy if the player's current pokeball filter settings
+		 *           will catch shinies, falsey otherwise.
+		 */
+		willCatchShiny() {
+			const filter = App.game.pokeballFilters.findMatch({
+				encounterType: "Route",
+				pokemonType:[
+					PokemonType.None,
+					PokemonType.None
+				],
+				shiny: true,
+				shadow: false,
+				pokerus: GameConstants.Pokerus.Uninfected,
+				caught: true,
+				caughtShiny: true,
+				caughtShadow: true,
+			});
+
+			if (!filter) {
+				return false;
+			}
+
+			const pokeballType = filter.ball();
+			return (pokeballType != GameConstants.Pokeball.None
+				&& App.game.pokeballs.pokeballs[pokeballType].quantity() > 0);
 		},
 	};
 
@@ -280,6 +314,9 @@
 
 			case QuestType.MINE_LAYERS:
 				return window.syfScripts?.diggy?.canCompleteLayersQuest?.();
+
+			case QuestType.SHINY:
+				return page.willCatchShiny();
 
 			default:
 				return false;
