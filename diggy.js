@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Digger
 // @namespace    http://tampermonkey.net/
-// @version      1.6.3
+// @version      1.6.3+mine-quest.0
 // @description  Automates digging underground in Pokéclicker.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -672,6 +672,15 @@
 		window[WINDOW_KEY] = {
 			locate: cmdLocate,
 			layer:  cmdLayer,
+		};
+
+		if (!window.syfScripts) {
+			window.syfScripts = {};
+		}
+
+		window.syfScripts.diggy = {
+			canCompleteItemsQuest() { return true; },
+			canCompleteLayersQuest() { return true; },
 		};
 
 		scheduleTick(DELAY_INIT);
