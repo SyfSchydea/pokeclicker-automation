@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.38.2+quest.1
+// @version      1.38.3+quest.1
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -888,7 +888,7 @@
 
 				// Get the required flavours assuming all berries are fully grown
 				const flavourReqs = m.fieldFlavor.map(
-						(f, i) => f / (m.flavorRatio[i] || 1));
+						(f, i) => f / m.flavorRatio[2]);
 
 				// Check if the given amount of berries is enough
 				// to satisfy the flavour requirements
