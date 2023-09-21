@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.7
+// @version      0.7+mine-quest.0
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -15,6 +15,8 @@
 	const QuestType = {
 		BERRY:       "berry",
 		FARM_POINTS: "farm points",
+		MINE_ITEMS:  "mine items",
+		MINE_LAYERS: "mine layers",
 		POKEDOLLARS: "pokedollars",
 
 		// Any quest types not yet handled by the script
@@ -137,6 +139,12 @@
 
 				case GainMoneyQuest:
 					return {type: QuestType.POKEDOLLARS};
+
+				case MineItemsQuest:
+					return {type: QuestType.MINE_ITEMS};
+
+				case MineLayersQuest:
+					return {type: QuestType.MINE_LAYERS};
 
 				default:
 					return {type: QuestType.UNKNOWN};
@@ -266,6 +274,12 @@
 
 			case QuestType.BERRY:
 				return window.syfScripts?.farmHand?.canCompleteBerryQuest?.(quest.berry);
+
+			case QuestType.MINE_ITEMS:
+				return window.syfScripts?.diggy?.canCompleteItemsQuest?.();
+
+			case QuestType.MINE_LAYERS:
+				return window.syfScripts?.diggy?.canCompleteLayersQuest?.();
 
 			default:
 				return false;
