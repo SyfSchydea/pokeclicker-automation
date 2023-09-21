@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.5.3
+// @version      0.6
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -13,6 +13,7 @@
 
 	// Enum for types of quests encountered
 	const QuestType = {
+		FARM_POINTS: "farm points",
 		POKEDOLLARS: "pokedollars",
 
 		// Any quest types not yet handled by the script
@@ -124,6 +125,9 @@
 			const quest = this._getQuest(questIdx);
 
 			switch (quest.constructor) {
+				case GainFarmPointsQuest:
+					return {type: QuestType.FARM_POINTS};
+
 				case GainMoneyQuest:
 					return {type: QuestType.POKEDOLLARS};
 
@@ -240,6 +244,24 @@
 		return false;
 	}
 
+	function questIsEligible(questIdx) {
+		if (!page.canStartQuest(questIdx)) {
+			return false;
+		}
+
+		const quest = page.getQuestInfo(i);
+		switch (quest.type) {
+			case QuestType.POKEDOLLARS:
+				return true;
+
+			case QuestType.FARM_POINTS:
+				return window.syfScripts?.farmHand?.canCompleteFarmPointQuest?.();
+
+			default:
+				return false;
+		}
+	}
+
 	function startEligibleQuest() {
 		if (!page.canStartNewQuests()) {
 			return false;
@@ -247,12 +269,7 @@
 
 		const questCount = page.getQuestCount();
 		for (let i = 0; i < questCount; ++i) {
-			if (!page.canStartQuest(i)) {
-				continue;
-			}
-
-			const quest = page.getQuestInfo(i);
-			if (quest.type == QuestType.POKEDOLLARS) {
+			if (questIsEligible(i)) {
 				page.startQuest(i);
 				return true;
 			}

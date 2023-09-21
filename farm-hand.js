@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.38.2
+// @version      1.38.2+quest.0
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -2544,6 +2544,14 @@
 			evolve: cmdEvolve,
 			wander: cmdWander,
 		}
+
+		if (!window.syfScripts) {
+			window.syfScripts = {};
+		}
+
+		window.syfScripts.farmHand = {
+			canCompleteFarmPointQuest() { return true; },
+		};
 
 		scheduleTick(DELAY_NO_TASK);
 	})();
