@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.38.3
+// @version      1.38.3+quest.1
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -2537,6 +2537,41 @@
 		console.log("Farming", berry, "for wanderers for", minutes, "minutes");
 	}
 
+	/**
+	 * Script interoperability function.
+	 * Check if the script is currently able to farm the given berry.
+	 */
+	function cmdCanFarmBerry(berryName) {
+		// We can always farm, Kasib, even if we don't have any now
+		if (berryName == "Kasib") {
+			return true;
+		}
+
+		// We can't farm other berries without having some to start with
+		if (page.getBerryAmount(berryName) <= 0) {
+			return false;
+		}
+
+		// Kebia can be farmed despite its low harvest amount
+		if (berryName == "Kebia") {
+			return true;
+		}
+
+		// Most berries can be farmed normally if they have a harvest amount above 1
+		const harvestAmount = page.getBerryAmount(berryName);
+		if (harvestAmount >= 2) {
+			return true;
+		}
+
+		// We can farm berries with slightly lower harvest amounts
+		// if we have Passhos to bring the harvest amount back up.
+		if (harvestAmount >= 1 && page.getBerryAmount("Passho") > 0) {
+			return true;
+		}
+
+		return false;
+	}
+
 	(function main() {
 		window[WINDOW_KEY] = {
 			start: cmdStart,
@@ -2544,6 +2579,15 @@
 			evolve: cmdEvolve,
 			wander: cmdWander,
 		}
+
+		if (!window.syfScripts) {
+			window.syfScripts = {};
+		}
+
+		window.syfScripts.farmHand = {
+			canCompleteFarmPointQuest() { return true; },
+			canCompleteBerryQuest: cmdCanFarmBerry,
+		};
 
 		scheduleTick(DELAY_NO_TASK);
 	})();
