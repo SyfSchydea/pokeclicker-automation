@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.9
+// @version      0.10
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -13,15 +13,17 @@
 
 	// Enum for types of quests encountered
 	const QuestType = {
-		BERRY:       "berry",
-		FARM_POINTS: "farm points",
-		MINE_ITEMS:  "mine items",
-		MINE_LAYERS: "mine layers",
-		POKEDOLLARS: "pokedollars",
-		SHINY:       "shiny",
+		BERRY:          "berry",
+		CATCH_POKEMON:  "catch",
+		CATCH_SHINIES:  "shiny",
+		DUNGEON_TOKENS: "dungeon tokens",
+		FARM_POINTS:    "farm points",
+		MINE_ITEMS:     "mine items",
+		MINE_LAYERS:    "mine layers",
+		POKEDOLLARS:    "pokedollars",
 
 		// Any quest types not yet handled by the script
-		UNKNOWN:     "unknown",
+		UNKNOWN: "unknown",
 	};
 
 	///// Page Interface /////
@@ -147,8 +149,14 @@
 				case MineLayersQuest:
 					return {type: QuestType.MINE_LAYERS};
 
+				case GainTokensQuest:
+					return {type: QuestType.DUNGEON_TOKENS},
+
+				case CapturePokemonsQuest:
+					return {type: QuestType.CATCH_POKEMON},
+
 				case CatchShiniesQuest:
-					return {type: QuestType.SHINY};
+					return {type: QuestType.CATCH_SHINIES};
 
 				default:
 					return {type: QuestType.UNKNOWN};
@@ -188,17 +196,35 @@
 		},
 
 		/**
+		 * Not required by interface.
+		 * Check if the specified encounter type will be caught by the player's current pokeball filter settings.
+		 *
+		 * @param encounterData {Object} - Details of the encounter type to query.
+		 * @return                       - Truthy if this encounter will be caught, falsey if not.
+		 */
+		_queryPokeballSettings(encounterData) {
+			const filter = App.game.pokeballFilters.findMatch(encounterData);
+			if (!filter) {
+				return false;
+			}
+
+			const pokeballType = filter.ball();
+			return (pokeballType != GameConstants.Pokeball.None
+				&& App.game.pokeballs.pokeballs[pokeballType].quantity() > 0);
+		},
+
+		/**
 		 * Check if the current pokeball settings will catch a shiny.
 		 *
 		 * @return - Truthy if the player's current pokeball filter settings
 		 *           will catch shinies, falsey otherwise.
 		 */
 		willCatchShiny() {
-			const filter = App.game.pokeballFilters.findMatch({
+			return this._queryPokeballSettings({
 				encounterType: "Route",
 				pokemonType:[
 					PokemonType.None,
-					PokemonType.None
+					PokemonType.None,
 				],
 				shiny: true,
 				shadow: false,
@@ -207,14 +233,28 @@
 				caughtShiny: true,
 				caughtShadow: true,
 			});
+		},
 
-			if (!filter) {
-				return false;
-			}
-
-			const pokeballType = filter.ball();
-			return (pokeballType != GameConstants.Pokeball.None
-				&& App.game.pokeballs.pokeballs[pokeballType].quantity() > 0);
+		/**
+		 * Check if the current pokeball settings will catch typical pokemon encounters.
+		 *
+		 * @return - Truthy if the player's current pokeball filter settings
+		 *           will catch standard non-shiny pokemon encounters.
+		 */
+		willCatchPokemon() {
+			return this._queryPokeballSettings({
+				encounterType: "Route",
+				pokemonType:[
+					PokemonType.None,
+					PokemonType.None,
+				],
+				shiny: false,
+				shadow: false,
+				pokerus: GameConstants.Pokerus.Uninfected,
+				caught: true,
+				caughtShiny: true,
+				caughtShadow: true,
+			});
 		},
 	};
 
@@ -315,7 +355,11 @@
 			case QuestType.MINE_LAYERS:
 				return window.syfScripts?.diggy?.canCompleteLayersQuest?.();
 
-			case QuestType.SHINY:
+			case QuestType.DUNGEON_TOKENS:
+			case QuestType.CATCH_POKEMON:
+				return page.willCatchPokemon();
+
+			case QuestType.CATCH_SHINIES:
 				return page.willCatchShiny();
 
 			default:
