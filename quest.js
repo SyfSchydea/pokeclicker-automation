@@ -544,6 +544,10 @@
 
 		const questCount = page.getActiveQuestCount();
 		for (let i = 0; i < questCount; ++i) {
+			if (page.activeQuestCompleted(i)) {
+				continue;
+			}
+
 			const qi = page.activeQuestIdxToQuestIdx(i);
 			const quest = page.getQuestInfo(qi);
 
