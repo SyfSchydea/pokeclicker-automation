@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.10
+// @version      0.10.1
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -150,10 +150,10 @@
 					return {type: QuestType.MINE_LAYERS};
 
 				case GainTokensQuest:
-					return {type: QuestType.DUNGEON_TOKENS},
+					return {type: QuestType.DUNGEON_TOKENS};
 
 				case CapturePokemonsQuest:
-					return {type: QuestType.CATCH_POKEMON},
+					return {type: QuestType.CATCH_POKEMON};
 
 				case CatchShiniesQuest:
 					return {type: QuestType.CATCH_SHINIES};
