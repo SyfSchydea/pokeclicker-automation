@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.12.1
+// @version      0.13
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -18,6 +18,7 @@
 		CATCH_SHINIES:  "shiny",
 		DUNGEON_TOKENS: "dungeon tokens",
 		FARM_POINTS:    "farm points",
+		HATCH_EGGS:     "hatch eggs",
 		MINE_ITEMS:     "mine items",
 		MINE_LAYERS:    "mine layers",
 		POKEDOLLARS:    "pokedollars",
@@ -163,6 +164,9 @@
 
 				case CatchShiniesQuest:
 					return {type: QuestType.CATCH_SHINIES};
+
+				case HatchEggsQuest:
+					return {type: QuestType.HATCH_EGGS};
 
 				default:
 					return {type: QuestType.UNKNOWN};
@@ -555,6 +559,9 @@
 			case QuestType.CATCH_SHINIES:
 				return (page.willCatch(EncounterType.SHINY)
 						|| Setting.modifyPokeballFilters.get());
+
+			case QuestType.HATCH_EGGS:
+				return window.syfScripts?.breeder?.canCompleteEggsQuest?.();
 
 			default:
 				return false;

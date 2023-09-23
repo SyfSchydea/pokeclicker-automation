@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PokéClicker - Auto-breeder
 // @namespace    http://tampermonkey.net/
-// @version      1.25.2
+// @version      1.26
 // @description  Handles breeding eggs automatically
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -206,10 +206,6 @@
 		 * @return               - Truthy if the pokemon may be bred, falsey if not.
 		 */
 		pokemonIsBreedable(dexId) {
-			if (!this.canBreed()) {
-				return false;
-			}
-
 			const mon = App.game.party.getPokemon(dexId);
 			return mon && mon.level >= 100 && !mon.breeding;
 		},
@@ -1176,6 +1172,25 @@
 		Setting.shinyBreeding.set(!!enable);
 	}
 
+	/**
+	 * Script interoperability command.
+	 * Check if the script if currently able to hatch eggs for a quest.
+	 */
+	function cmdCanHatchEggs() {
+		if (!page.canAccessBreeding || Setting.pauseHatch.get()) {
+			return false;
+		}
+
+		// Check that we have pokemon which can be incubated
+		for (const id of page.getCaughtPokemon()) {
+			if (page.pokemonIsBreedable(id)) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	(function main() {
 		scheduleTick(DELAY_INITIAL);
 
@@ -1188,6 +1203,14 @@
 			saveScumShiny:       cmdSetSaveScumShiny,
 			saveScumHatchShiny:  cmdSetSaveScumHatchShiny,
 			saveScumIncubateEgg: cmdSetSaveScumIncubateEgg,
+		};
+
+		if (!window.syfScripts) {
+			window.syfScripts = {};
+		}
+
+		window.syfScripts.breeder = {
+			canCompleteEggsQuest: cmdCanHatchEggs,
 		};
 
 		console.log("Loaded auto-breeder");
