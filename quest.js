@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.14
+// @version      0.14.1
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -535,7 +535,7 @@
 			}
 
 			if (ball != null) {
-				page.setFilterBall(uuid, ball);
+				page.setFilterBall(filterUuid, ball);
 			}
 
 			this.settingCreated.set(true);
