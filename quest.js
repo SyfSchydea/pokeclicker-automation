@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.15
+// @version      0.15.1
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -541,6 +541,8 @@
 			return typesEncountered;
 		},
 	};
+
+	page._populateTypedEncounters();
 
 	//////////////////////////
 
