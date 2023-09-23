@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.13
+// @version      0.14
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -22,6 +22,7 @@
 		MINE_ITEMS:     "mine items",
 		MINE_LAYERS:    "mine layers",
 		POKEDOLLARS:    "pokedollars",
+		USE_POKEBALL:   "use pokeball",
 
 		// Any quest types not yet handled by the script
 		UNKNOWN: "unknown",
@@ -168,6 +169,13 @@
 				case HatchEggsQuest:
 					return {type: QuestType.HATCH_EGGS};
 
+				case UsePokeballQuest:
+					return {
+						type: QuestType.USE_POKEBALL,
+						ball: GameConstants.Pokeball[quest.pokeball],
+						amount: quest.amount,
+					};
+
 				default:
 					return {type: QuestType.UNKNOWN};
 			}
@@ -274,6 +282,35 @@
 		},
 
 		/**
+		 * Find the type of pokeball which will be used
+		 * for the given encounter type.
+		 *
+		 * @param encounterType {EncounterType} - Type to query.
+		 * @return              {string}        - String ID of the pokeball
+		 *                                        which will be used.
+		 */
+		getPokeballForEncounter(encounterType) {
+			const encounter = this._encounters[encounterType];
+			const filter = App.game.pokeballFilters.findMatch(encounter);
+			if (!filter) {
+				return "None";
+			}
+
+			return GameConstants.Pokeball[filter.ball()];
+		},
+
+		/**
+		 * Check how many of the given pokeball the player owns.
+		 *
+		 * @param ball {string} - String ID of the pokeball to query.
+		 * @return     {number} - Amount of pokeballs of the given type owned.
+		 */
+		getPokeballAmount(ball) {
+			const ballId = GameConstants.Pokeball[ball];
+			return App.game.pokeballs.pokeballs[ballId].quantity();
+		},
+
+		/**
 		 * Fetch the total number of pokeball filters in the list.
 		 *
 		 * @return {number} - Number of filters in the list.
@@ -374,6 +411,31 @@
 			App.game.pokeballFilters.addFilterOption(filter, key);
 			filter.options[key].observableValue(value);
 		},
+
+		/**
+		 * Set the pokeball used for the given pokeball filter.
+		 *
+		 * @param uuid {string} - UUID of the filter to modify.
+		 * @param ball {string} - String ID of the pokeball to use.
+		 */
+		setFilterBall(uuid, ball) {
+			const filter = this._getFilter(uuid);
+
+			if (ball != "None") {
+				const ballId = GameConstants.Pokeball[ball];
+				if (ballId == GameConstants.Pokeball.Masterball
+						&& App.game.challenges.list.disableMasterballs.active()) {
+					throw new Error("Cannot use masterballs with the Disable Masterball challenge active");
+				}
+
+				const pokeball = App.game.pokeballs.pokeballs[ballId];
+				if (!pokeball.unlocked()) {
+					throw new Error("Have not unlocked " + ball);
+				}
+			}
+
+			filter.ball(GameConstants.Pokeball[ball]);
+		},
 	};
 
 	//////////////////////////
@@ -458,7 +520,7 @@
 			this.isRequired = false;
 		}
 
-		addFilter() {
+		addFilter(ball=null) {
 			if (this.settingCreated.get()) {
 				this.removeFilter();
 			}
@@ -470,6 +532,10 @@
 			
 			for (const [k, v] of Object.entries(this.options)) {
 				page.addFilterOption(filterUuid, k, v);
+			}
+
+			if (ball != null) {
+				page.setFilterBall(uuid, ball);
 			}
 
 			this.settingCreated.set(true);
@@ -560,6 +626,11 @@
 				return (page.willCatch(EncounterType.SHINY)
 						|| Setting.modifyPokeballFilters.get());
 
+			case QuestType.USE_POKEBALL:
+				return (page.getPokeballAmount(quest.ball) >= quest.amount
+					&& (page.getPokeballForEncounter(EncounterType.REGULAR)
+						|| Setting.modifyPokeballFilters.get()));
+
 			case QuestType.HATCH_EGGS:
 				return window.syfScripts?.breeder?.canCompleteEggsQuest?.();
 
@@ -614,6 +685,15 @@
 					}
 
 					FilterType.shiny.addFilter();
+					return true;
+
+				case QuestType.USE_POKEBALL:
+					if (page.getPokeballForEncounter(EncounterType.REGULAR) == quest.ball) {
+						FilterType.regular.isRequired = true;
+						continue;
+					}
+
+					FilterType.regular.addFilter(quest.ball);
 					return true;
 			}
 		}
