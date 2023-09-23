@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.40
+// @version      1.40.1
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -1891,11 +1891,18 @@
 
 			// Find the youngest berry, ignoring any excess
 			const berryCount = countBerries(this.berry);
-			const excessBerries = Math.max(0, berryCount - this.amount);
-			const youngestIdx = findNthYoungestBerry(this.berry, excessBerries);
 
 			let youngestAge;
-			if (youngestIdx != null) {
+			if (berryCount < this.amount) {
+				youngestAge = 0;
+
+			} else {
+				const excessBerries = berryCount - this.amount;
+				const youngestIdx = findNthYoungestBerry(this.berry, excessBerries);
+				if (youngestIdx == null) {
+					return false;
+				}
+
 				youngestAge = page.getPlotAge(youngestIdx);
 
 				// If we've got enough mature plants right now,
@@ -1903,11 +1910,6 @@
 				if (youngestAge >= maturityAge) {
 					return false;
 				}
-
-			} else if (berryCount < this.amount) {
-				youngestAge = 0;
-			} else {
-				return false;
 			}
 
 			// If the oldest will die before the youngest matures,
