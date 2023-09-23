@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.39.2
+// @version      1.40
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -853,7 +853,9 @@
 		},
 
 		/**
-		 * Find a berry which may be usefully mutated by several of another berry anywhere in the field.
+		 * Find a berry which may be usefully mutated
+		 * by several of another berry anywhere in the field,
+		 * but are specified by their flavours.
 		 *
 		 * @return {{
 		 *   targetBerry: string,
@@ -925,6 +927,65 @@
 						amount,
 					};
 				}
+			}
+
+			return null;
+		},
+
+		/**
+		 * Find a berry which may be usefully mutated
+		 * by several of another berry anywhere in the field,
+		 * and are specified directly by the mutation data.
+		 *
+		 * @return {{
+		 *   targetBerry: string,
+		 *   parentBerry: string,
+		 *   amount: number,
+		 * }} - Object containing the names of the target and parent
+		 *      berries, and the number of parent berries required for the mutation.
+		 *      Null if there are no suitable mutations.
+		 */
+		getEligibleFieldMutation() {
+			const farming = this._getFarmingModule();
+			if (!farming) {
+				return null;
+			}
+
+			for (const m of farming.mutations) {
+				// Filter for mutations of the right type...
+				if (!(m instanceof FieldMutation)) {
+					continue;
+				}
+
+				// And which we've unlocked...
+				if (!m.unlocked) {
+					continue;
+				}
+
+				// And which we haven't already done...
+				if (farming.berryList[m.mutatedBerry]() > 0
+						|| this._isBerryIdOnField(m.mutatedBerry)) {
+					continue;
+				}
+
+				// Only take mutations with a single parent for now
+				if (m.fieldBerries.length > 1) {
+					continue;
+				}
+
+				const parentBerry = m.fieldBerries[0].berry;
+				const amount = m.fieldBerries[0].amountRequired;
+
+				// Check we have enough of the parent
+				if (farming.berryList[parentBerry]() < amount + 1) {
+					continue;
+				}
+
+				return {
+					targetBerry: this._lookupBerry(m.mutatedBerry),
+					parentBerry: this._lookupBerry(parentBerry),
+					amount,
+				};
 			}
 
 			return null;
@@ -2485,16 +2546,17 @@
 				break mutationTasks;
 			}
 
-			const fieldFlavourMutation = page.getEligibleFieldFlavourMutation();
-			if (fieldFlavourMutation) {
+			const fieldMutation = (page.getEligibleFieldFlavourMutation()
+					|| page.getEligibleFieldMutation());
+			if (fieldMutation) {
 				console.log("Farming to grow",
-					fieldFlavourMutation.amount,
-					fieldFlavourMutation.parentBerry, "into",
-					fieldFlavourMutation.targetBerry);
+					fieldMutation.amount,
+					fieldMutation.parentBerry, "into",
+					fieldMutation.targetBerry);
 				currentTask = makeFieldMutationTask(
-					fieldFlavourMutation.targetBerry,
-					fieldFlavourMutation.parentBerry,
-					fieldFlavourMutation.amount);
+					fieldMutation.targetBerry,
+					fieldMutation.parentBerry,
+					fieldMutation.amount);
 				priority = currentTask.priority;
 				break mutationTasks;
 			}
