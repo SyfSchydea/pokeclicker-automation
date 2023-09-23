@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.11.1
+// @version      0.11.1.1
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -392,8 +392,6 @@
 
 	const POKEBALL_FILTER_REGULAR_NAME = "!syfQuest caught";
 
-	// TODO: Can this be moved to some kind of library file?
-		// This is some code duplication from breeder.js
 	const SETTINGS_SCOPE_SAVE = {
 		storage: localStorage,
 		getKey: () => "syfschydea--quest--settings--" + page.getSaveKey(),
