@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.10.1
+// @version      0.10.1+active-pokeballs
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -213,6 +213,21 @@
 				&& App.game.pokeballs.pokeballs[pokeballType].quantity() > 0);
 		},
 
+		// Definition of a regular route encounter
+		_regularEncounter: {
+			encounterType: "Route",
+			pokemonType:[
+				PokemonType.None,
+				PokemonType.None,
+			],
+			shiny: false,
+			shadow: false,
+			pokerus: GameConstants.Pokerus.Uninfected,
+			caught: true,
+			caughtShiny: true,
+			caughtShadow: true,
+		},
+
 		/**
 		 * Check if the current pokeball settings will catch a shiny.
 		 *
@@ -242,19 +257,119 @@
 		 *           will catch standard non-shiny pokemon encounters.
 		 */
 		willCatchPokemon() {
-			return this._queryPokeballSettings({
-				encounterType: "Route",
-				pokemonType:[
-					PokemonType.None,
-					PokemonType.None,
-				],
-				shiny: false,
-				shadow: false,
-				pokerus: GameConstants.Pokerus.Uninfected,
-				caught: true,
-				caughtShiny: true,
-				caughtShadow: true,
-			});
+			return this._queryPokeballSettings(this._regularEncounter);
+		},
+
+		/**
+		 * Find the index of the pokeball filter which will match a regular pokemon encounter.
+		 *
+		 * @return {number} - Index of the filter which matches a typical route encounter, or -1 if none match.
+		 */
+		getRegularPokemonFilterIndex() {
+			const filter = App.game.pokeballFilters.findMatch(this._regularEncounter);
+			return App.game.pokeballFilters.list.indexOf(filter);
+		},
+
+		/**
+		 * Fetch the total number of pokeball filters in the list.
+		 *
+		 * @return {number} - Number of filters in the list.
+		 */
+		getTotalFilterCount() {
+			return App.game.pokeballFilters.list().length;
+		},
+
+		/**
+		 * Find the UUID of the nth pokeball filter in the list.
+		 *
+		 * @param index {number} - Position of the specified filter in the list.
+		 * @return      {string} - UUID of the filter.
+		 */
+		filterIndexToUuid(index) {
+			return App.game.pokeballFilters.list()[index].uuid;
+		},
+
+		/**
+		 * Create a new pokeball filter in the specified position in the list, and return its UUID.
+		 *
+		 * @param index {number} - Position in the list it should be inserted.
+		 * @return      {string} - UUID of the newly created filter.
+		 */
+		createPokeballFilter(index) {
+			App.game.pokeballFilters.createFilter();
+			const filter = App.game.pokeballFilters.list()[0];
+
+			if (filter.name != "New Filter") {
+				throw new Error(`Unexpected new filter name: '${filter.name}'`);
+			}
+
+			App.game.pokeballFilters.list.remove(filter);
+			App.game.pokeballFilters.list.splice(index, 0, filter);
+
+			return filter.uuid;
+		},
+
+		/**
+		 * Remove the specified pokeball filter from the list.
+		 *
+		 * @param uuid {string} - UUID of the filter to remove.
+		 */
+		deleteFilter(uuid) {
+			App.game.pokeballFilters.list.remove(this._getFilter(uuid));
+		},
+
+		/**
+		 * Not required by interface.
+		 * Fetch the pokeball filter with the given UUID.
+		 * Will throw an error if the filter cannot be found.
+		 *
+		 * @param uuid {string}         - UUID of the filter to find.
+		 * @return     {PokeballFilter} - Matching filter object.
+		 */
+		_getFilter(uuid) {
+			const list = App.game.pokeballFilters.list();
+			for (let i = 0; i < list.length; ++i) {
+				const filter = list[i];
+
+				if (filter.uuid == uuid) {
+					return filter;
+				}
+			}
+
+			throw new Error("Failed to find filter " + uuid);
+		},
+
+		/**
+		 * Find the name of the specified filter.
+		 *
+		 * @param uuid {string} - UUID of the filter to look up.
+		 * @return     {string} - Name of the filter.
+		 */
+		getFilterName(uuid) {
+			return this._getFilter(uuid).name;
+		},
+
+		/**
+		 * Set the name of a pokeball filter.
+		 *
+		 * @param uuid {string} - UUID of the filter to modify.
+		 * @param name {string} - Name to give to this filter.
+		 */
+		setFilterName(uuid, name) {
+			this._getFilter(uuid).name = name;
+		},
+
+		/**
+		 * Add an option to the given pokeball filter.
+		 *
+		 * @param uuid  {string}  - UUID of the filter to modify.
+		 * @param key   {string}  - Option name to add.
+		 * @param value {boolean} - Option value to set.
+		 */
+		addFilterOption(uuid, key, value) {
+			const filter = this._getFilter(uuid);
+			App.game.pokeballFilters.addFilterOption(filter, key);
+			filter.options[key].observableValue(value);
 		},
 	};
 
@@ -269,15 +384,24 @@
 
 	const WINDOW_KEY = "quest";
 
-	const DELAY_INIT        =  5 * 1000;
-	const DELAY_IDLE        = 10 * 1000;
-	const DELAY_COLLECT     =       500;
-	const DELAY_START_QUEST =      1000;
+	const DELAY_INIT            =  5 * 1000;
+	const DELAY_IDLE            = 10 * 1000;
+	const DELAY_COLLECT         =       500;
+	const DELAY_START_QUEST     =      1000;
+	const DELAY_POKEBALL_FILTER =      1000;
+
+	const POKEBALL_FILTER_REGULAR_NAME = "!syfQuest caught";
 
 	// TODO: Can this be moved to some kind of library file?
 		// This is some code duplication from breeder.js
-	const SETTINGS_SCOPE_SAVE = {storage: localStorage,
-			getKey: () => "syfschydea--quest--settings--" + page.getSaveKey()};
+	const SETTINGS_SCOPE_SAVE = {
+		storage: localStorage,
+		getKey: () => "syfschydea--quest--settings--" + page.getSaveKey(),
+	};
+	const SETTINGS_SCOPE_SESSION = {
+		storage: sessionStorage,
+		getKey: () => "syfschydea--quest--settings",
+	};
 
 	/**
 	 * Holds info about a single value which exists in settings.
@@ -321,6 +445,10 @@
 	Setting.collectQuests = new Setting(SETTINGS_SCOPE_SAVE, "collect", false);
 	Setting.startQuests   = new Setting(SETTINGS_SCOPE_SAVE, "startQuests", false);
 
+	Setting.modifyPokeballFilters = new Setting(SETTINGS_SCOPE_SESSION, "pokeballFilters", false);
+
+	Setting.createdRegularFilter = new Setting(SETTINGS_SCOPE_SESSION, "hasRegularFilter", false);
+
 	function collectCompletedQuest() {
 		const questCount = page.getActiveQuestCount();
 		for (let i = 0; i < questCount; ++i) {
@@ -357,7 +485,8 @@
 
 			case QuestType.DUNGEON_TOKENS:
 			case QuestType.CATCH_POKEMON:
-				return page.willCatchPokemon();
+				return (page.willCatchPokemon()
+						|| Setting.modifyPokeballFilters.get());
 
 			case QuestType.CATCH_SHINIES:
 				return page.willCatchShiny();
@@ -383,9 +512,73 @@
 		return false;
 	}
 
+	function addRegularPokemonFilter() {
+		const filterIdx = page.getRegularPokemonFilterIndex() + 1;
+
+		const filterUuid = page.createPokeballFilter(filterIdx);
+		page.setFilterName(filterUuid, POKEBALL_FILTER_REGULAR_NAME);
+		page.addFilterOption(filterUuid, "caught", true);
+
+		Setting.createdRegularFilter.set(true);
+	}
+
+	function removeRegularPokeballFilters() {
+		const matchingFilters = [];
+		const totalFilterCount = page.getTotalFilterCount();
+		for (let i = 0; i < totalFilterCount; ++i) {
+			const uuid = page.filterIndexToUuid(i);
+			if (page.getFilterName(uuid) == POKEBALL_FILTER_REGULAR_NAME) {
+				matchingFilters.push(uuid);
+			}
+		}
+
+		for (const uuid of matchingFilters) {
+			page.deleteFilter(uuid);
+		}
+
+		Setting.createdRegularFilter.set(false);
+	}
+
+	function updatePokeballFilters() {
+		let needRegularFilter = false;
+
+		const questCount = page.getActiveQuestCount();
+		for (let i = 0; i < questCount; ++i) {
+			if (page.activeQuestCompleted(i)) {
+				continue;
+			}
+
+			const qi = page.activeQuestIdxToQuestIdx(i);
+			const quest = page.getQuestInfo(qi);
+
+			switch (quest.type) {
+				case QuestType.DUNGEON_TOKENS:
+				case QuestType.CATCH_POKEMON:
+					if (page.willCatchPokemon()) {
+						needRegularFilter = true;
+						continue;
+					}
+
+					addRegularPokemonFilter();
+					return true;
+			}
+		}
+
+		if (!needRegularFilter && Setting.createdRegularFilter.get()) {
+			removeRegularPokeballFilters();
+			return true;
+		}
+
+		return false;
+	}
+
 	function tick() {
 		if (!page.gameLoaded()) {
 			return setTimeout(tick, DELAY_IDLE);
+		}
+
+		if (Setting.modifyPokeballFilters.get() && updatePokeballFilters()) {
+			return setTimeout(tick, DELAY_POKEBALL_FILTER);
 		}
 
 		if (Setting.collectQuests.get() && collectCompletedQuest()) {
@@ -421,10 +614,29 @@
 		console.log((startQuests? "Began" : "Stopped"), "starting eligible quests");
 	}
 
+	/**
+	 * User-facing command.
+	 * Set if the script should modify pokeball filters
+	 * to actively complete quests or not.
+	 *
+	 * @param value - Truthy to modify pokeball filters, falsey to not.
+	 */
+	function cmdSetPokeballFilters(value=true) {
+		Setting.modifyPokeballFilters.set(!!value);
+
+		if (!value) {
+			removeRegularPokeballFilters();
+		}
+
+		console.log((value? "Started" : "Stopped"), "modifying pokeball filters to complete quests");
+	}
+
 	function exposeCommands() {
 		window[WINDOW_KEY] = {
 			collectQuests: cmdSetCollect,
 			startQuests:   cmdSetStartQuests,
+
+			modifyPokeballFilters: cmdSetPokeballFilters,
 		};
 	}
 
