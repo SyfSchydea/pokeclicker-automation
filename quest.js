@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.14.1
+// @version      0.15
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -16,6 +16,7 @@
 		BERRY:          "berry",
 		CATCH_POKEMON:  "catch",
 		CATCH_SHINIES:  "shiny",
+		CATCH_TYPED:    "catch typed",
 		DUNGEON_TOKENS: "dungeon tokens",
 		FARM_POINTS:    "farm points",
 		HATCH_EGGS:     "hatch eggs",
@@ -26,12 +27,6 @@
 
 		// Any quest types not yet handled by the script
 		UNKNOWN: "unknown",
-	};
-
-	// Enum for pokemon encounter types
-	const EncounterType = {
-		REGULAR: "regular",
-		SHINY:   "shiny",
 	};
 
 	///// Page Interface /////
@@ -46,7 +41,50 @@
 	 * interface may not function correctly after any change.
 	 */
 
+	// Enum for pokemon encounter types
+	const EncounterType = {
+		REGULAR: "regular",
+		SHINY:   "shiny",
+
+		Typed: {}, // Populated dynamically
+	};
+
 	const page = {
+		/**
+		 * Populate the EncounterType enum and _encounters list
+		 * with encounters for each pokemon type.
+		 * To be called once at script initialisation.
+		 */
+		_populateTypedEncounters() {
+			for (const type of this.getPokemonTypes()) {
+				EncounterTypes.Typed[type] = "typed-" + type.toLowerCase()
+				this._encounters[EncounterTypes.Typed[type]] = {
+					encounterType: "Route",
+					pokemonType:[
+						PokemonType[type],
+						PokemonType.None,
+					],
+					shiny: false,
+					shadow: false,
+					pokerus: GameConstants.Pokerus.Uninfected,
+					caught: true,
+					caughtShiny: true,
+					caughtShadow: true,
+				};
+			}
+		},
+
+		/**
+		 * Fetch a list of all pokemon types.
+		 *
+		 * @return {string[]} - List of pokemon types as strings.
+		 */
+		getPokemonTypes() {
+			return Object.entries(PokemonType)
+					.filter(x => typeof x[1] == "number" && x[1] >= 0)
+					.map(x => x[0]);
+		},
+
 		/**
 		 * Check if the game is loaded.
 		 *
@@ -166,6 +204,12 @@
 				case CatchShiniesQuest:
 					return {type: QuestType.CATCH_SHINIES};
 
+				case CapturePokemonTypesQuest:
+					return {
+						type: QuestType.CATCH_TYPED,
+						pokemonType: PokemonType[quest.type],
+					};
+
 				case HatchEggsQuest:
 					return {type: QuestType.HATCH_EGGS};
 
@@ -242,6 +286,8 @@
 				caughtShiny: true,
 				caughtShadow: true,
 			},
+
+			// Entries for EncounterType.Typed[...] are filled in dynamically
 		},
 
 		/**
@@ -408,6 +454,12 @@
 		 */
 		addFilterOption(uuid, key, value) {
 			const filter = this._getFilter(uuid);
+
+			// Convert pokemon types to numeric
+			if (key == "pokemonType") {
+				value = PokemonType[value];
+			}
+
 			App.game.pokeballFilters.addFilterOption(filter, key);
 			filter.options[key].observableValue(value);
 		},
@@ -435,6 +487,58 @@
 			}
 
 			filter.ball(GameConstants.Pokeball[ball]);
+		},
+
+		/**
+		 * Check if the player is currently battling at a route.
+		 *
+		 * @return - Truthy if the player is at a route. Falsey if not.
+		 */
+		isOnRoute() {
+			return App.game.gameState == GameConstants.GameState.fighting;
+		},
+
+		/**
+		 * Find the route which the player is currently on.
+		 *
+		 * @return {string} - Name of the route.
+		 */
+		getCurrentRoute() {
+			const route = Routes.getRoute(player.region, player.route());
+			return route.routeName;
+		},
+
+		/**
+		 * Not required by interface.
+		 * Fetch a route object by its full name.
+		 *
+		 * @param name {string}      - Name of the route to look up.
+		 * @return     {RegionRoute} - Route object, or null if not found.
+		 */
+		_getRouteByName(name) {
+			return Routes.regionRoutes.find(r => r.routeName == name);
+		},
+
+		/**
+		 * Find which pokemon types will be encountered on the given route.
+		 *
+		 * @param routeName {string}      - Name of the route to look up.
+		 * @return          {Set(string)} - Set of pokemon types encountered.
+		 */
+		getTypesEncounteredOnRoute(routeName) {
+			const route = this._getRouteByName(routeName);
+			const pokemonEncountered = RouteHelper.getAvailablePokemonList(
+					route.region, route.number);
+
+			const typesEncountered = new Set();
+			for (const name of pokemonEncountered) {
+				const pkmn = PokemonHelper.getPokemonByName(name);
+				typesEncountered.add(PokemonType[pkmn.type1]);
+				typesEncountered.add(PokemonType[pkmn.type2]);
+			}
+
+			typesEncountered.delete("None");
+			return typesEncountered;
 		},
 	};
 
@@ -583,6 +687,20 @@
 			"hasShinyFilter"),
 	];
 
+	FilterType.byPokemonType = {};
+
+	for (const type of page.getPokemonTypes()) {
+		const filter = new FilterType(EncounterType.Typed[type],
+			"!syfQuest " + type.toLowerCase(), {
+				caught: true,
+				pokemonType: type,
+			},
+			`hasTyped${type}Filter`);
+
+		FilterType.all.push(filter);
+		FilterType.byPokemonType[type] = filter;
+	}
+
 	function collectCompletedQuest() {
 		const questCount = page.getActiveQuestCount();
 		for (let i = 0; i < questCount; ++i) {
@@ -593,6 +711,16 @@
 		}
 
 		return false;
+	}
+
+	function willEncounterTypeOnCurrentRoute(pokemonType) {
+		if (!page.isOnRoute()) {
+			return false;
+		}
+
+		const currentRoute = page.getCurrentRoute();
+		const typesEncountered = page.getTypesEncounteredOnRoute(currentRoute);
+		return typesEncountered.has(pokemonType);
 	}
 
 	function questIsEligible(questIdx) {
@@ -625,6 +753,14 @@
 			case QuestType.CATCH_SHINIES:
 				return (page.willCatch(EncounterType.SHINY)
 						|| Setting.modifyPokeballFilters.get());
+
+			case QuestType.CATCH_TYPED:
+				if (!page.willCatch(EncounterType.Typed[quest.pokemonType])
+						&& !Setting.modifyPokeballFilters.get()) {
+					return false;
+				}
+
+				return willEncounterTypeOnCurrentRoute(quest.pokemonType);
 
 			case QuestType.USE_POKEBALL:
 				return (page.getPokeballAmount(quest.ball) >= quest.amount
@@ -685,6 +821,16 @@
 					}
 
 					FilterType.shiny.addFilter();
+					return true;
+
+				case QuestType.CATCH_TYPED:
+					if (page.willCatch(EncounterType.Typed[quest.pokemonType])) {
+						FilterType.byPokemonType[quest.pokemonType]
+								.isRequired = true;
+						continue;
+					}
+
+					FilterType.byPokemonType[quest.pokemonType].addFilter();
 					return true;
 
 				case QuestType.USE_POKEBALL:
