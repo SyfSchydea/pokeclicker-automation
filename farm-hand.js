@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.39.1
+// @version      1.39.2
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -1771,7 +1771,7 @@
 		let oldestIdx = null;
 
 		for (let i = 0; i < PAGE_PLOT_COUNT; ++i) {
-			if (page.getBerryAmount(i) != berryType) {
+			if (page.getBerryInPlot(i) != berryType) {
 				continue;
 			}
 
@@ -1790,7 +1790,7 @@
 		const youngest = [];
 
 		for (let i = 0; i < PAGE_PLOT_COUNT; ++i) {
-			if (page.getBerryAmount(i) != berryType) {
+			if (page.getBerryInPlot(i) != berryType) {
 				continue;
 			}
 
