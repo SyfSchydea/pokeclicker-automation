@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PokéClicker - Auto-breeder
 // @namespace    http://tampermonkey.net/
-// @version      1.26
+// @version      1.26.1
 // @description  Handles breeding eggs automatically
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -1177,7 +1177,7 @@
 	 * Check if the script if currently able to hatch eggs for a quest.
 	 */
 	function cmdCanHatchEggs() {
-		if (!page.canAccessBreeding || Setting.pauseHatch.get()) {
+		if (!page.canAccessBreeding || Setting.hatchPause.get()) {
 			return false;
 		}
 
