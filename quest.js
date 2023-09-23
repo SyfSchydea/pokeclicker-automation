@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.11.1.1
+// @version      0.12
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -24,6 +24,12 @@
 
 		// Any quest types not yet handled by the script
 		UNKNOWN: "unknown",
+	};
+
+	// Enum for pokemon encounter types
+	const EncounterType = {
+		REGULAR: "regular",
+		SHINY:   "shiny",
 	};
 
 	///// Page Interface /////
@@ -195,47 +201,23 @@
 			return !quest.inProgress() && !quest.isCompleted();
 		},
 
-		/**
-		 * Not required by interface.
-		 * Check if the specified encounter type will be caught by the player's current pokeball filter settings.
-		 *
-		 * @param encounterData {Object} - Details of the encounter type to query.
-		 * @return                       - Truthy if this encounter will be caught, falsey if not.
-		 */
-		_queryPokeballSettings(encounterData) {
-			const filter = App.game.pokeballFilters.findMatch(encounterData);
-			if (!filter) {
-				return false;
-			}
+		// Encounter type definitions for querying the filters
+		_encounters: {
+			[EncounterType.REGULAR]: {
+				encounterType: "Route",
+				pokemonType:[
+					PokemonType.None,
+					PokemonType.None,
+				],
+				shiny: false,
+				shadow: false,
+				pokerus: GameConstants.Pokerus.Uninfected,
+				caught: true,
+				caughtShiny: true,
+				caughtShadow: true,
+			},
 
-			const pokeballType = filter.ball();
-			return (pokeballType != GameConstants.Pokeball.None
-				&& App.game.pokeballs.pokeballs[pokeballType].quantity() > 0);
-		},
-
-		// Definition of a regular route encounter
-		_regularEncounter: {
-			encounterType: "Route",
-			pokemonType:[
-				PokemonType.None,
-				PokemonType.None,
-			],
-			shiny: false,
-			shadow: false,
-			pokerus: GameConstants.Pokerus.Uninfected,
-			caught: true,
-			caughtShiny: true,
-			caughtShadow: true,
-		},
-
-		/**
-		 * Check if the current pokeball settings will catch a shiny.
-		 *
-		 * @return - Truthy if the player's current pokeball filter settings
-		 *           will catch shinies, falsey otherwise.
-		 */
-		willCatchShiny() {
-			return this._queryPokeballSettings({
+			[EncounterType.SHINY]: {
 				encounterType: "Route",
 				pokemonType:[
 					PokemonType.None,
@@ -247,26 +229,43 @@
 				caught: true,
 				caughtShiny: true,
 				caughtShadow: true,
-			});
+			},
 		},
 
 		/**
-		 * Check if the current pokeball settings will catch typical pokemon encounters.
+		 * Check if the current pokeball settings
+		 * will catch a given encounter type.
 		 *
-		 * @return - Truthy if the player's current pokeball filter settings
-		 *           will catch standard non-shiny pokemon encounters.
+		 * @param encounterType {EncounterType} - Type to query.
+		 * @return                              - Truthy if the player's
+		 *                                        current pokeball filter
+		 *                                        settings will catch this type
+		 *                                        of encounter,
+		 *                                        falsey otherwise.
 		 */
-		willCatchPokemon() {
-			return this._queryPokeballSettings(this._regularEncounter);
+		willCatch(encounterType) {
+			const encounter = this._encounters[encounterType];
+			const filter = App.game.pokeballFilters.findMatch(encounter);
+			if (!filter) {
+				return false;
+			}
+
+			const pokeballType = filter.ball();
+			return (pokeballType != GameConstants.Pokeball.None
+				&& App.game.pokeballs.pokeballs[pokeballType].quantity() > 0);
 		},
 
 		/**
-		 * Find the index of the pokeball filter which will match a regular pokemon encounter.
+		 * Find the index of the pokeball filter which will match
+		 * a given pokemon encounter type.
 		 *
-		 * @return {number} - Index of the filter which matches a typical route encounter, or -1 if none match.
+		 * @param encounterType {EncounterType} - Type to query.
+		 * @return              {number}        - Index of the filter which
+		 *                                        matches, or -1 if none match.
 		 */
-		getRegularPokemonFilterIndex() {
-			const filter = App.game.pokeballFilters.findMatch(this._regularEncounter);
+		getFilterIndex(encounterType) {
+			const encounter = this._encounters[encounterType];
+			const filter = App.game.pokeballFilters.findMatch(encounter);
 			return App.game.pokeballFilters.list.indexOf(filter);
 		},
 
@@ -445,7 +444,73 @@
 
 	Setting.modifyPokeballFilters = new Setting(SETTINGS_SCOPE_SESSION, "pokeballFilters", false);
 
-	Setting.createdRegularFilter = new Setting(SETTINGS_SCOPE_SESSION, "hasRegularFilter", false);
+	class FilterType {
+		constructor(encounterType, name, options, settingsKey) {
+			this.encounterType = encounterType;
+			this.name = name;
+			this.options = options;
+
+			this.settingCreated = new Setting(SETTINGS_SCOPE_SESSION, settingsKey, false);
+			this.isRequired = false;
+		}
+
+		addFilter() {
+			if (this.settingCreated.get()) {
+				this.removeFilter();
+			}
+
+			const filterIdx = page.getFilterIndex(this.encounterType) + 1;
+
+			const filterUuid = page.createPokeballFilter(filterIdx);
+			page.setFilterName(filterUuid, this.name);
+			
+			for (const [k, v] of Object.entries(this.options)) {
+				page.addFilterOption(filterUuid, k, v);
+			}
+
+			this.settingCreated.set(true);
+		}
+
+		removeFilter() {
+			const matchingFilters = [];
+			const totalFilterCount = page.getTotalFilterCount();
+			for (let i = 0; i < totalFilterCount; ++i) {
+				const uuid = page.filterIndexToUuid(i);
+				if (page.getFilterName(uuid) == this.name) {
+					matchingFilters.push(uuid);
+				}
+			}
+
+			for (const uuid of matchingFilters) {
+				page.deleteFilter(uuid);
+			}
+
+			this.settingCreated.set(false);
+		}
+
+		removeIfNotNeeded() {
+			if (!this.isRequired && this.settingCreated.get()) {
+				this.removeFilter();
+				return true;
+			}
+
+			return false;
+		}
+	}
+
+	FilterType.all = [
+		FilterType.regular = new FilterType(EncounterType.REGULAR,
+			"!syfQuest caught", {
+				caught: true,
+			},
+			"hasRegularFilter"),
+		FilterType.shiny = newFilterType(EncounterType.SHINY,
+			"!syfQuest shiny", {
+				shiny: true,
+				caughtShiny: true,
+			},
+			"hasShinyFilter"),
+	];
 
 	function collectCompletedQuest() {
 		const questCount = page.getActiveQuestCount();
@@ -483,11 +548,12 @@
 
 			case QuestType.DUNGEON_TOKENS:
 			case QuestType.CATCH_POKEMON:
-				return (page.willCatchPokemon()
+				return (page.willCatch(EncounterType.REGULAR)
 						|| Setting.modifyPokeballFilters.get());
 
 			case QuestType.CATCH_SHINIES:
-				return page.willCatchShiny();
+				return (page.willCatch(EncounterType.SHINY)
+						|| Setting.modifyPokeballFilters.get());
 
 			default:
 				return false;
@@ -510,39 +576,8 @@
 		return false;
 	}
 
-	function addRegularPokemonFilter() {
-		if (Setting.createdRegularFilter.get()) {
-			removeRegularPokeballFilters();
-		}
-
-		const filterIdx = page.getRegularPokemonFilterIndex() + 1;
-
-		const filterUuid = page.createPokeballFilter(filterIdx);
-		page.setFilterName(filterUuid, POKEBALL_FILTER_REGULAR_NAME);
-		page.addFilterOption(filterUuid, "caught", true);
-
-		Setting.createdRegularFilter.set(true);
-	}
-
-	function removeRegularPokeballFilters() {
-		const matchingFilters = [];
-		const totalFilterCount = page.getTotalFilterCount();
-		for (let i = 0; i < totalFilterCount; ++i) {
-			const uuid = page.filterIndexToUuid(i);
-			if (page.getFilterName(uuid) == POKEBALL_FILTER_REGULAR_NAME) {
-				matchingFilters.push(uuid);
-			}
-		}
-
-		for (const uuid of matchingFilters) {
-			page.deleteFilter(uuid);
-		}
-
-		Setting.createdRegularFilter.set(false);
-	}
-
 	function updatePokeballFilters() {
-		let needRegularFilter = false;
+		FilterType.all.forEach(ft => { ft.isRequired = false; });
 
 		const questCount = page.getActiveQuestCount();
 		for (let i = 0; i < questCount; ++i) {
@@ -556,19 +591,29 @@
 			switch (quest.type) {
 				case QuestType.DUNGEON_TOKENS:
 				case QuestType.CATCH_POKEMON:
-					if (page.willCatchPokemon()) {
-						needRegularFilter = true;
+					if (page.willCatch(EncounterType.REGULAR)) {
+						FilterType.regular.isRequired = true;
 						continue;
 					}
 
-					addRegularPokemonFilter();
+					FilterType.regular.addFilter();
+					return true;
+
+				case QuestType.CATCH_SHINIES:
+					if (page.willCatch(EncounterType.SHINY)) {
+						FilterType.shiny.isRequired = true;
+						continue;
+					}
+
+					FilterType.shiny.addFilter();
 					return true;
 			}
 		}
 
-		if (!needRegularFilter && Setting.createdRegularFilter.get()) {
-			removeRegularPokeballFilters();
-			return true;
+		for (const ft of FilterType.all) {
+			if (ft.removeIfNotNeeded()) {
+				return true;
+			}
 		}
 
 		return false;
@@ -627,7 +672,7 @@
 		Setting.modifyPokeballFilters.set(!!value);
 
 		if (!value) {
-			removeRegularPokeballFilters();
+			FilterType.all.forEach(ft => ft.removeFilter());
 		}
 
 		console.log((value? "Started" : "Stopped"), "modifying pokeball filters to complete quests");
