@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.15.1
+// @version      0.15.2
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -57,8 +57,8 @@
 		 */
 		_populateTypedEncounters() {
 			for (const type of this.getPokemonTypes()) {
-				EncounterTypes.Typed[type] = "typed-" + type.toLowerCase()
-				this._encounters[EncounterTypes.Typed[type]] = {
+				EncounterType.Typed[type] = "typed-" + type.toLowerCase();
+				this._encounters[EncounterType.Typed[type]] = {
 					encounterType: "Route",
 					pokemonType:[
 						PokemonType[type],
