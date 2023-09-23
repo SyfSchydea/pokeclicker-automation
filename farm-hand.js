@@ -1765,47 +1765,6 @@
 		}
 	}
 
-	// Find the index of the oldest berry of a specific type on the field
-	function findOldestBerry(berryType) {
-		let oldestAge = -1;
-		let oldestIdx = null;
-
-		for (let i = 0; i < PAGE_PLOT_COUNT; ++i) {
-			if (page.getBerryAmount(i) != berryType) {
-				continue;
-			}
-
-			const age = page.getPlotAge(i);
-			if (age > oldestAge) {
-				oldestAge = age;
-				oldestIdx = i;
-			}
-		}
-
-		return oldestIdx;
-	}
-
-	// Find the index of the nth youngest berry of a specific type on the field
-	function findNthYoungestBerry(berryType, n) {
-		const youngest = [];
-
-		for (let i = 0; i < PAGE_PLOT_COUNT; ++i) {
-			if (page.getBerryAmount(i) != berryType) {
-				continue;
-			}
-
-			const age = page.getPlotAge(i);
-			youngest.push({age, idx: i});
-			youngest.sort((a, b) => a.age - b.age);
-
-			if (youngest.length > n + 1) {
-				youngest.pop();
-			}
-		}
-
-		return youngest[n]?.idx ?? null;
-	}
-
 	// Maintain a given number of a given berry on the field,
 	// without caring about layout
 	class FieldBerryCountAction {
@@ -1814,37 +1773,16 @@
 			this.amount = amount;
 		}
 
-		// Harvest berries which are of the correct type, but too old
-		harvestRedundantBerries() {
-			const oldestIdx = findOldestBerry(this.berry);
-			if (oldestIdx == null) {
-				return false;
-			}
-
-			const excessBerries = Math.max(0,
-					countBerries(this.berry) - this.amount);
-			// TODO: Find the index of the (excess+1)th youngest non-mature berry
-			// TODO: If none
-				// TODO: If there are enough berries total, skip this block
-				// TODO: If not, pretend the youngest berry has age 0
-			// TODO: Calc time from oldest to death, and youngest to maturity
-			// TODO: If the oldest will die before the youngest matures, harvest the oldest
-		}
-
 		performAction() {
-			// Harvest anything else
-			if (harvestOne({exceptBerries: [this.berry]}) != null) {
-				return DELAY_HARVEST;
-			}
-
-			if (this.harvestRedundantBerries()) {
-				return DELAY_HARVEST;
-			}
-
 			// Plant one if there aren't enough
 			if (countBerries(this.berry) < this.amount
 					&& plantOne(this.berry) != null) {
 				return DELAY_PLANT;
+			}
+
+			// Harvest anything else
+			if (harvestOne({exceptBerries: [this.berry]}) != null) {
+				return DELAY_HARVEST;
 			}
 
 			return DELAY_IDLE;
