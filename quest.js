@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.11
+// @version      0.11.1
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -513,6 +513,10 @@
 	}
 
 	function addRegularPokemonFilter() {
+		if (Setting.createdRegularFilter.get()) {
+			removeRegularPokeballFilters();
+		}
+
 		const filterIdx = page.getRegularPokemonFilterIndex() + 1;
 
 		const filterUuid = page.createPokeballFilter(filterIdx);
