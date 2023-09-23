@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.39
+// @version      1.39.1
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -1765,6 +1765,47 @@
 		}
 	}
 
+	// Find the index of the oldest berry of a specific type on the field
+	function findOldestBerry(berryType) {
+		let oldestAge = -1;
+		let oldestIdx = null;
+
+		for (let i = 0; i < PAGE_PLOT_COUNT; ++i) {
+			if (page.getBerryAmount(i) != berryType) {
+				continue;
+			}
+
+			const age = page.getPlotAge(i);
+			if (age > oldestAge) {
+				oldestAge = age;
+				oldestIdx = i;
+			}
+		}
+
+		return oldestIdx;
+	}
+
+	// Find the index of the nth youngest berry of a specific type on the field
+	function findNthYoungestBerry(berryType, n) {
+		const youngest = [];
+
+		for (let i = 0; i < PAGE_PLOT_COUNT; ++i) {
+			if (page.getBerryAmount(i) != berryType) {
+				continue;
+			}
+
+			const age = page.getPlotAge(i);
+			youngest.push({age, idx: i});
+			youngest.sort((a, b) => a.age - b.age);
+
+			if (youngest.length > n + 1) {
+				youngest.pop();
+			}
+		}
+
+		return youngest[n]?.idx ?? null;
+	}
+
 	// Maintain a given number of a given berry on the field,
 	// without caring about layout
 	class FieldBerryCountAction {
@@ -1773,16 +1814,68 @@
 			this.amount = amount;
 		}
 
+		// Harvest berries which are of the correct type, but too old
+		harvestRedundantBerries() {
+			const oldestIdx = findOldestBerry(this.berry);
+			if (oldestIdx == null) {
+				return false;
+			}
+
+			// Can't harvest the oldest if it's not mature yet
+			const oldestAge = page.getPlotAge(oldestIdx);
+			const maturityAge = page.getBerryMaturityAge(this.berry);
+			if (oldestAge < maturityAge) {
+				return false;
+			}
+
+			// Find the youngest berry, ignoring any excess
+			const berryCount = countBerries(this.berry);
+			const excessBerries = Math.max(0, berryCount - this.amount);
+			const youngestIdx = findNthYoungestBerry(this.berry, excessBerries);
+
+			let youngestAge;
+			if (youngestIdx != null) {
+				youngestAge = page.getPlotAge(youngestIdx);
+
+				// If we've got enough mature plants right now,
+				// don't harvest any
+				if (youngestAge >= maturityAge) {
+					return false;
+				}
+
+			} else if (berryCount < this.amount) {
+				youngestAge = 0;
+			} else {
+				return false;
+			}
+
+			// If the oldest will die before the youngest matures,
+			// harvest the oldest
+			const deathAge = page.getBerryDeathAge(this.berry);
+			const timeToMaturity = maturityAge - youngestAge;
+			const timeToDeath = deathAge - oldestAge;
+
+			if (timeToDeath < timeToMaturity) {
+				return harvestPlot(oldestIdx);
+			}
+
+			return false;
+		}
+
 		performAction() {
+			// Harvest anything else
+			if (harvestOne({exceptBerries: [this.berry]}) != null) {
+				return DELAY_HARVEST;
+			}
+
+			if (this.harvestRedundantBerries()) {
+				return DELAY_HARVEST;
+			}
+
 			// Plant one if there aren't enough
 			if (countBerries(this.berry) < this.amount
 					&& plantOne(this.berry) != null) {
 				return DELAY_PLANT;
-			}
-
-			// Harvest anything else
-			if (harvestOne({exceptBerries: [this.berry]}) != null) {
-				return DELAY_HARVEST;
 			}
 
 			return DELAY_IDLE;
