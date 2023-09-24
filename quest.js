@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.15.2
+// @version      0.15.3
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -528,7 +528,7 @@
 		getTypesEncounteredOnRoute(routeName) {
 			const route = this._getRouteByName(routeName);
 			const pokemonEncountered = RouteHelper.getAvailablePokemonList(
-					route.region, route.number);
+					route.number, route.region);
 
 			const typesEncountered = new Set();
 			for (const name of pokemonEncountered) {
