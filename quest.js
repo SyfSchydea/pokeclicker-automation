@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.16
+// @version      0.17
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -547,6 +547,49 @@
 			typesEncountered.delete("None");
 			return typesEncountered;
 		},
+
+		/**
+		 * Fetch the subregion which the given route is in.
+		 *
+		 * @param routeName {string} - Name of the route to look up.
+		 * @return          {string} - Name of the subregion containing the route.
+		 */
+		getRouteSubregion(routeName) {
+			const route = this._getRouteByName(routeName);
+			const regionId = route.region;
+			const subregionId = route.subRegion ?? 0;
+			const subregion = SubRegions.getSubRegionById(regionId, subregion);
+			return subregion.name;
+		},
+
+		/**
+		 * Move the the given route within the same subregion.
+		 *
+		 * @param routeName {string} - Name of the route to move to.
+		 */
+		moveToRoute(routeName) {
+			const route = this._getRouteByName(routeName);
+
+			if (route.region != player.region
+					|| (route.subregion ?? 0) != player.subregion) {
+				throw new Error("moveToRoute cannot move between subregions");
+			}
+
+			MapHelper.moveToRoute(route.number, route.region);
+		},
+
+		/**
+		 * Check if the player has the required defeats on a route to have "completed" it.
+		 *
+		 * @param routeName {string} - Name of the route to look up.
+		 * @return                   - Truthy if the route is complete.
+		 *                             Falsey if not.
+		 */
+		routeCompleted(routeName) {
+			const route = this._getRouteByName(routeName);
+			const routeKills = App.game.statistics.routeKills[route.region][route.number]();
+			return routeKills >= GameConstants.ROUTE_KILLS_NEEDED;
+		},
 	};
 
 	page._populateTypedEncounters();
@@ -567,6 +610,7 @@
 	const DELAY_COLLECT         =       500;
 	const DELAY_START_QUEST     =      1000;
 	const DELAY_POKEBALL_FILTER =      1000;
+	const DELAY_MOVEMENT        =      1000;
 
 	const POKEBALL_FILTER_REGULAR_NAME = "!syfQuest caught";
 
@@ -622,6 +666,10 @@
 	Setting.startQuests   = new Setting(SETTINGS_SCOPE_SAVE, "startQuests", false);
 
 	Setting.modifyPokeballFilters = new Setting(SETTINGS_SCOPE_SESSION, "pokeballFilters", false);
+	Setting.activeMovement        = new Setting(SETTINGS_SCOPE_SESSION, "activeMovement",  false);
+
+	Setting.currentPosition = new Setting(SETTINGS_SCOPE_SESSION, "currentPosition", null);
+	Setting.returnPosition  = new Setting(SETTINGS_SCOPE_SESSION, "returnPosition",  null);
 
 	class FilterType {
 		constructor(encounterType, name, options, settingsKey) {
@@ -780,8 +828,14 @@
 				return window.syfScripts?.breeder?.canCompleteEggsQuest?.();
 
 			case QuestType.ROUTE_DEFEAT:
-				return (page.isOnRoute()
-						&& quest.route == page.getCurrentRoute());
+				if (page.isOnRoute()
+						&& quest.route == page.getCurrentRoute()) {
+					return true;
+				}
+
+				return (Setting.activeMovement.get()
+						&& canMove() && canMoveToRoute(quest.route)
+						&& Setting.currentPosition.get() == null);
 
 			default:
 				return false;
@@ -866,9 +920,80 @@
 		return false;
 	}
 
+	function canMove() {
+		return page.isOnRoute();
+	}
+
+	function canMoveToRoute(route) {
+		// We aren't (yet) moving between subregions
+		const playerRoute = page.getCurrentRoute();
+		if (page.getRouteSubregion(route)
+				!= page.getRouteSubregion(playerRoute)) {
+			return false;
+		}
+
+		// Avoid going to routes which haven't yet been completed
+		return page.routeCompleted(route);
+	}
+
+	function updateActiveMovement() {
+		if (!canMove()) {
+			return false;
+		}
+
+		const expectedPos = Setting.currentPosition.get();
+		const playerRoute = page.getCurrentRoute();
+		if (expectedPos != null && expectedPos != playerRoute) {
+			disableActiveMovement();
+			console.warn("Player has moved. Disabling active movement");
+			return false;
+		}
+
+		const questCount = page.getActiveQuestCount();
+		for (let i = 0; i < questCount; ++i) {
+			if (page.activeQuestCompleted(i)) {
+				continue;
+			}
+
+			const qi = page.activeQuestIdxToQuestIdx(i);
+			const quest = page.getQuestInfo(qi);
+
+			switch (quest.type) {
+				case QuestType.ROUTE_DEFEAT:
+					if (quest.route == playerRoute) {
+						return false;
+					}
+
+					if (!canMoveToRoute(quest.route)) {
+						continue;
+					}
+
+					if (Setting.returnPosition.get() == null) {
+						Setting.returnPosition.set(playerRoute);
+					}
+
+					page.moveToRoute(quest.route);
+					Setting.currentPosition.set(quest.route);
+					return true;
+			}
+		}
+
+		// If we exit the quest loop, there aren't any quest requiring specific locations...
+		const returnPos = Setting.returnPosition.get();
+		if (returnPos != null) {
+			page.moveToRoute(returnPos);
+			Setting.returnPosition.set(null);
+			Setting.currentPosition.set(null);
+		}
+	}
+
 	function tick() {
 		if (!page.gameLoaded()) {
 			return setTimeout(tick, DELAY_IDLE);
+		}
+
+		if (Setting.activeMovement.get() && updateActiveMovement()) {
+			return setTimeout(tick, DELAY_MOVEMENT);
 		}
 
 		if (Setting.modifyPokeballFilters.get() && updatePokeballFilters()) {
@@ -908,6 +1033,11 @@
 		console.log((startQuests? "Began" : "Stopped"), "starting eligible quests");
 	}
 
+	function disablePokeballFilters() {
+		FilterType.all.forEach(ft => ft.removeFilter());
+		Setting.modifyPokeballFilters.set(false);
+	}
+
 	/**
 	 * User-facing command.
 	 * Set if the script should modify pokeball filters
@@ -916,13 +1046,90 @@
 	 * @param value - Truthy to modify pokeball filters, falsey to not.
 	 */
 	function cmdSetPokeballFilters(value=true) {
-		Setting.modifyPokeballFilters.set(!!value);
-
-		if (!value) {
-			FilterType.all.forEach(ft => ft.removeFilter());
+		if (value) {
+			Setting.modifyPokeballFilters.set(true);
+		} else {
+			disablePokeballFilters();
 		}
 
 		console.log((value? "Started" : "Stopped"), "modifying pokeball filters to complete quests");
+	}
+
+	function disableActiveMovement() {
+		Setting.activeMovement.set(false);
+		Setting.currentPosition.set(null);
+		Setting.returnPosition.set(null);
+	}
+
+	/**
+	 * User-facing command.
+	 * Set if the script should move to different locations
+	 * to actively complete quests or not.
+	 *
+	 * @param value - Truthy to move locations, falsey to not.
+	 */
+	function cmdSetActiveMovement(value=true) {
+		if (value) {
+			Setting.activeMovement.set(!!value);
+		} else {
+			disableActiveMovement();
+		}
+
+		console.log((value? "Started" : "Stopped"), "moving to complete quests");
+	}
+
+	/**
+	 * User-facing command.
+	 * Set if the script should use all available methods
+	 * to actively complete quests or not.
+	 *
+	 * @param value - Truthy to actively attempt to complete quests,
+	 *                falsey to not.
+	 */
+	function cmdActiveQuests(value) {
+		Setting.collectQuests.set(!!value);
+		Setting.startQuests.set(!!value);
+
+		if (value) {
+			Setting.modifyPokeballFilters.set(true);
+			Setting.activeMovement.set(true);
+		} else {
+			disablePokeballFilters();
+			disableActiveMovement();
+		}
+
+		console.log((value? "Started" : "Stopped"), "actively completing quests");
+	}
+
+	/**
+	 * User-facing command.
+	 * Set if the script should attempt to only passively complete quests.
+	 *
+	 * @param value - Truthy to attempt to complete quests,
+	 *                falsey to not.
+	 */
+	function cmdPassiveQuests(value) {
+		Setting.collectQuests.set(!!value);
+		Setting.startQuests.set(!!value);
+
+		disablePokeballFilters();
+		disableActiveMovement();
+
+		console.log((value? "Started" : "Stopped"), "passively completing quests");
+	}
+
+	/**
+	 * User-facing command.
+	 * Stop all activity by this script until reactivated.
+	 */
+	function cmdStop() {
+		Setting.collectQuests.set(false);
+		Setting.startQuests.set(false);
+
+		disablePokeballFilters();
+		disableActiveMovement();
+
+		console.log("Stopped completing quests");
 	}
 
 	function exposeCommands() {
@@ -931,6 +1138,11 @@
 			startQuests:   cmdSetStartQuests,
 
 			modifyPokeballFilters: cmdSetPokeballFilters,
+			activeMovement:        cmdSetActiveMovement,
+
+			activeQuests:  cmdActiveQuests,
+			passiveQuests: cmdPassiveQuests,
+			stop:          cmdStop,
 		};
 	}
 
