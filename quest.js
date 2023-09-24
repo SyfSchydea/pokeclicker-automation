@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.17.2
+// @version      0.18
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -19,6 +19,7 @@
 		CATCH_TYPED:    "catch typed",
 		DUNGEON_TOKENS: "dungeon tokens",
 		FARM_POINTS:    "farm points",
+		GYM:            "gym",
 		HATCH_EGGS:     "hatch eggs",
 		MINE_ITEMS:     "mine items",
 		MINE_LAYERS:    "mine layers",
@@ -176,60 +177,89 @@
 		 */
 		getQuestInfo(questIdx) {
 			const quest = this._getQuest(questIdx);
+			let details;
 
 			switch (quest.constructor) {
 				case HarvestBerriesQuest:
-					return {
+					details = {
 						type: QuestType.BERRY,
 						berry: BerryType[quest.berryType],
 					};
+					break;
 
 				case GainFarmPointsQuest:
-					return {type: QuestType.FARM_POINTS};
+					details = {type: QuestType.FARM_POINTS};
+					break;
 
 				case GainMoneyQuest:
-					return {type: QuestType.POKEDOLLARS};
+					details = {type: QuestType.POKEDOLLARS};
+					break;
 
 				case MineItemsQuest:
-					return {type: QuestType.MINE_ITEMS};
+					details = {type: QuestType.MINE_ITEMS};
+					break;
 
 				case MineLayersQuest:
-					return {type: QuestType.MINE_LAYERS};
+					details = {type: QuestType.MINE_LAYERS};
+					break;
 
 				case GainTokensQuest:
-					return {type: QuestType.DUNGEON_TOKENS};
+					details = {type: QuestType.DUNGEON_TOKENS};
+					break;
 
 				case CapturePokemonsQuest:
-					return {type: QuestType.CATCH_POKEMON};
+					details = {type: QuestType.CATCH_POKEMON};
+					break;
 
 				case CatchShiniesQuest:
-					return {type: QuestType.CATCH_SHINIES};
+					details = {type: QuestType.CATCH_SHINIES};
+					break;
 
 				case CapturePokemonTypesQuest:
-					return {
+					details = {
 						type: QuestType.CATCH_TYPED,
 						pokemonType: PokemonType[quest.type],
 					};
+					break;
 
 				case HatchEggsQuest:
-					return {type: QuestType.HATCH_EGGS};
+					details = {type: QuestType.HATCH_EGGS};
+					break;
 
 				case UsePokeballQuest:
-					return {
+					details = {
 						type: QuestType.USE_POKEBALL,
 						ball: GameConstants.Pokeball[quest.pokeball],
-						amount: quest.amount,
 					};
+					break;
 
 				case DefeatPokemonsQuest:
-					return {
+					details = {
 						type: QuestType.ROUTE_DEFEAT,
 						route: Routes.getRoute(quest.region, quest.route).routeName,
 					};
+					break;
+
+				case DefeatGymQuest:
+					details = {
+						type: QuestType.GYM,
+						gym: quest.gymTown,
+					};
+					break;
 
 				default:
-					return {type: QuestType.UNKNOWN};
+					details = {type: QuestType.UNKNOWN};
+					break;
 			}
+
+			details.amount = quest.amount;
+			if (quest.initial() == null) {
+				details.amountRemaining = quest.amount;
+			} else {
+				details.amountRemaining = quest.amount - (quest.focus() - quest.initial());
+			}
+
+			return details;
 		},
 
 		/**
@@ -506,6 +536,15 @@
 		},
 
 		/**
+		 * Check if the player is currently sitting at a town.
+		 *
+		 * @return - Truthy if the player is at a town. Falsey if not.
+		 */
+		isInTown() {
+			return App.game.gameState == GameConstants.GameState.town;
+		},
+
+		/**
 		 * Find the route which the player is currently on.
 		 *
 		 * @return {string} - Name of the route.
@@ -513,6 +552,15 @@
 		getCurrentRoute() {
 			const route = Routes.getRoute(player.region, player.route());
 			return route.routeName;
+		},
+
+		/**
+		 * Find the town which the player is currently at.
+		 *
+		 * @return {string} - Name of the town.
+		 */
+		getCurrentTown() {
+			return player.town().name;
 		},
 
 		/**
@@ -564,6 +612,19 @@
 		},
 
 		/**
+		 * Fetch the subregion which the given town is in.
+		 *
+		 * @param townName {string} - Name of the town to look up.
+		 * @return         {string} - Name of the subregion containing the town.
+		 */
+		getTownSubregion(townName) {
+			const town = TownList[townName];
+			const subregion = SubRegions.getSubRegionById(
+					town.region, town.subRegion);
+			return subregion.name;
+		}
+
+		/**
 		 * Move the the given route within the same subregion.
 		 *
 		 * @param routeName {string} - Name of the route to move to.
@@ -572,11 +633,27 @@
 			const route = this._getRouteByName(routeName);
 
 			if (route.region != player.region
-					|| (route.subregion ?? 0) != player.subregion) {
+					|| (route.subRegion ?? 0) != player.subRegion) {
 				throw new Error("moveToRoute cannot move between subregions");
 			}
 
 			MapHelper.moveToRoute(route.number, route.region);
+		},
+
+		/**
+		 * Move the the given town within the same subregion.
+		 *
+		 * @param townName {string} - Name of the town to move to.
+		 */
+		moveToTown(townName) {
+			const town = TownList[townName];
+
+			if (town.region != player.region
+					|| town.subRegion != player.subRegion) {
+				throw new Error("moveToTown cannot move between subregions");
+			}
+
+			MapHelper.moveToTown(townName);
 		},
 
 		/**
@@ -590,6 +667,38 @@
 			const route = this._getRouteByName(routeName);
 			const routeKills = App.game.statistics.routeKills[route.region][route.number]();
 			return routeKills >= GameConstants.ROUTE_KILLS_NEEDED;
+		},
+
+		/**
+		 * Check if the given town is unlocked and accessible.
+		 *
+		 * @param townName {string} - Name of town to look up.
+		 * @return                  - Truthy if unlocked. Falsey if not.
+		 */
+		townUnlocked(townName) {
+			const town = TownList[townName];
+			return town.isUnlocked();
+		},
+
+		/**
+		 * Check if the player has completed the given gym.
+		 *
+		 * @param gymName {string} - Name of the gym to look up.
+		 * @return                 - Truthy if the gym is complete.
+		 *                           Falsey if not.
+		 */
+		gymCompleted(gymName) {
+			return GymList[gymName].clears() > 0;
+		},
+
+		/**
+		 * Find the name of the town containing the given gym.
+		 *
+		 * @param gymName {string} - Name of the gym to look up.
+		 * @return        {string} - Town name.
+		 */
+		getGymTownName(gymName) {
+			return GymList[gymName].parent.name;
 		},
 	};
 
@@ -628,10 +737,12 @@
 	 * Holds info about a single value which exists in settings.
 	 */
 	class Setting {
-		constructor(scope, key, defaultVal) {
+		// readFn may be passed to process the raw value when reading
+		constructor(scope, key, defaultVal, readFn=x=>x) {
 			this.scope = scope;
 			this.key = key;
 			this.defaultVal = defaultVal;
+			this.readFn = readFn;
 		}
 
 		_read() {
@@ -652,7 +763,7 @@
 				return this.defaultVal;
 			}
 
-			return settings[this.key];
+			return this.readFn(settings[this.key]);
 		}
 
 		set(val) {
@@ -669,8 +780,8 @@
 	Setting.modifyPokeballFilters = new Setting(SETTINGS_SCOPE_SESSION, "pokeballFilters", false);
 	Setting.activeMovement        = new Setting(SETTINGS_SCOPE_SESSION, "activeMovement",  false);
 
-	Setting.currentPosition = new Setting(SETTINGS_SCOPE_SESSION, "currentPosition", null);
-	Setting.returnPosition  = new Setting(SETTINGS_SCOPE_SESSION, "returnPosition",  null);
+	Setting.currentPosition = new Setting(SETTINGS_SCOPE_SESSION, "currentPosition", null, Location.fromRaw);
+	Setting.returnPosition  = new Setting(SETTINGS_SCOPE_SESSION, "returnPosition",  null, Location.fromRaw);
 
 	class FilterType {
 		constructor(encounterType, name, options, settingsKey) {
@@ -759,6 +870,97 @@
 		FilterType.byPokemonType[type] = filter;
 	}
 
+	// Represents either a route or a town
+	class Location {
+		constructor(type, name) {
+			this.type = type;
+			this.name = name;
+		}
+
+		// abstract getSubregion()
+		// abstract moveTo()
+
+		canMoveTo() {
+			// We aren't (yet) moving between subregions
+			const playerLoc = getPlayerLocation();
+			return this.getSubregion() != playerLoc.getSubregion();
+		}
+
+		equals(that) {
+			return (that instanceof Location
+					&& that.type == this.type
+					&& that.name == this.name);
+		}
+
+		// Convert a simple object with type and name properties
+		// to a Location subclass object
+		static fromRaw(obj) {
+			if (obj == null) {
+				return null;
+			}
+
+			switch (obj.type) {
+				case "route":
+					return new RouteLocation(obj.name);
+
+				case "town":
+					return new TownLocation(obj.name);
+
+				default:
+					throw new Error("Invalid location type: " + obj.type);
+			}
+		}
+	}
+
+	class RouteLocation extends Location {
+		constructor(routeName) {
+			super("route", routeName);
+		}
+
+		getSubregion() {
+			return page.getRouteSubregion(this.name);
+		}
+
+		canMoveTo() {
+			// Avoid going to routes which haven't yet been completed
+			return super.canMoveTo() && page.routeCompleted(this.name);
+		}
+
+		moveTo() {
+			page.moveToRoute(this.name);
+		}
+	}
+
+	class TownLocation extends Location {
+		constructor(townName) {
+			super("town", townName);
+		}
+
+		getSubregion() {
+			return page.getRouteSubregion(this.name);
+		}
+
+		canMoveTo() {
+			return super.canMoveTo() && page.townUnlocked(this.name);
+		}
+
+		moveTo() {
+			page.moveToTown(this.name);
+		}
+	}
+
+	function getPlayerLocation() {
+		if (page.isOnRoute()) {
+			return new RouteLocation(page.getCurrentRoute());
+		}
+
+		if (page.isInTown()) {
+			return new TownLocation(page.getCurrentTown());
+		}
+
+		return null;
+	}
+
 	function collectCompletedQuest() {
 		const questCount = page.getActiveQuestCount();
 		for (let i = 0; i < questCount; ++i) {
@@ -828,15 +1030,33 @@
 			case QuestType.HATCH_EGGS:
 				return window.syfScripts?.breeder?.canCompleteEggsQuest?.();
 
-			case QuestType.ROUTE_DEFEAT:
-				if (page.isOnRoute()
-						&& quest.route == page.getCurrentRoute()) {
+			case QuestType.ROUTE_DEFEAT: {
+				const questRoute = new RouteLocation(quest.route);
+
+				if (questRoute.equals(getPlayerLocation())) {
 					return true;
 				}
 
 				return (Setting.activeMovement.get()
-						&& canMove() && canMoveToRoute(quest.route)
+						&& canMove() && questRoute.canMoveTo()
 						&& Setting.currentPosition.get() == null);
+			}
+
+			case QuestType.GYM: {
+				if (!Setting.activeMovement.get()
+						|| !window.syfScripts?.gym?.canClearGyms?.()) {
+					return false;
+				}
+
+				const gymTownName = page.getGymTown(quest.gym);
+				const gymTown = new TownLocation(gymTownName);
+				if (!gymTown.equals(getPlayerLocation())
+						&& !gymTown.canMoveTo()) {
+					return false;
+				}
+
+				return Setting.currentPosition.get() == null;
+			}
 
 			default:
 				return false;
@@ -922,19 +1142,16 @@
 	}
 
 	function canMove() {
-		return page.isOnRoute();
+		return page.isOnRoute() || page.isInTown();
 	}
 
-	function canMoveToRoute(route) {
-		// We aren't (yet) moving between subregions
-		const playerRoute = page.getCurrentRoute();
-		if (page.getRouteSubregion(route)
-				!= page.getRouteSubregion(playerRoute)) {
-			return false;
+	function moveToActiveLocation(loc) {
+		if (Setting.returnPosition.get() == null) {
+			Setting.returnPosition.set(getPlayerLocation());
 		}
 
-		// Avoid going to routes which haven't yet been completed
-		return page.routeCompleted(route);
+		loc.moveTo();
+		Setting.currentPosition.set(loc);
 	}
 
 	function updateActiveMovement() {
@@ -943,8 +1160,8 @@
 		}
 
 		const expectedPos = Setting.currentPosition.get();
-		const playerRoute = page.getCurrentRoute();
-		if (expectedPos != null && expectedPos != playerRoute) {
+		const playerLoc = getPlayerLocation();
+		if (expectedPos != null && !expectedPos.equals(playerLoc)) {
 			disableActiveMovement();
 			console.warn("Player has moved. Disabling active movement");
 			return false;
@@ -960,29 +1177,50 @@
 			const quest = page.getQuestInfo(qi);
 
 			switch (quest.type) {
-				case QuestType.ROUTE_DEFEAT:
-					if (quest.route == playerRoute) {
+				case QuestType.ROUTE_DEFEAT: {
+					const questLoc = new RouteLocation(quest.route);
+					if (questLoc.equals(playerLoc)) {
 						return false;
 					}
 
-					if (!canMoveToRoute(quest.route)) {
+					if (!questLoc.canMoveTo()) {
 						continue;
 					}
 
-					if (Setting.returnPosition.get() == null) {
-						Setting.returnPosition.set(playerRoute);
+					moveToActiveLocation(questLoc);
+					return true;
+				}
+
+				case QuestType.GYM: {
+					if (!page.gymCompleted(quest.gym)
+							|| window.syfScripts?.gym?.canClearGyms?.()) {
+						continue;
 					}
 
-					page.moveToRoute(quest.route);
-					Setting.currentPosition.set(quest.route);
-					return true;
+					const gymTownName = page.getGymTown(quest.gym);
+					const gymTown = new TownLocation(gymTownName);
+					if (gymTown.equals(playerLoc)) {
+						if (window.syfScripts.gym.busy?.()) {
+							return false;
+						}
+
+						window.syfScripts.gym.clearGym(
+								quest.gym, quest.amountRemaining);
+						return true;
+					}
+
+					if (gymTown.canMoveTo()) {
+						moveToActiveLocation(gymTown);
+						return true;
+					}
+				}
 			}
 		}
 
 		// If we exit the quest loop, there aren't any quest requiring specific locations...
 		const returnPos = Setting.returnPosition.get();
 		if (returnPos != null) {
-			page.moveToRoute(returnPos);
+			returnPos.moveTo();
 			Setting.returnPosition.set(null);
 			Setting.currentPosition.set(null);
 		}

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Gym Runner
 // @namespace    http://tampermonkey.net/
-// @version      1.2.1.1
+// @version      1.3
 // @description  Runs gyms automatically.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -29,24 +29,48 @@
 		/**
 		 * Fetch the gym for the current area.
 		 *
-		 * @param n {number} - 1-indexed index for the Elite 4 or Champion fight or 0 for a regular gym.
-		 * @return  {Gym}    - Gym object.
+		 * @param n {number|string} - 1-indexed index for the Elite 4
+		 *                            or Champion fight or 0 for a regular gym.
+		 *                            Or the name of the gym to find
+		 *                            as a string.
+		 * @return  {Gym}           - Gym object.
 		 */
 		_getGym(n=0) {
-			const idx = n == 0? 0 : n - 1;
-
 			const gyms = player.town().content.filter(c => c instanceof Gym);
-			if (!(idx in gyms)) {
-				throw new Error("Gym", n, "not found");
-			}
 
-			return gyms[idx];
+			switch (typeof n) {
+				case "number": {
+					const idx = n == 0? 0 : n - 1;
+
+					if (!(idx in gyms)) {
+						throw new Error("Gym", n, "not found");
+					}
+
+					return gyms[idx];
+				}
+
+				case "string": {
+					const gym = gyms.find(g => g.town == n);
+
+					if (!gym) {
+						throw new Error("Gym", n, "not found");
+					}
+
+					return gym;
+				}
+
+				default:
+					throw new Error("Invalid type for n: " + (typeof n));
+			}
 		},
 
 		/**
 		 * Start the gym which the player is currently at.
 		 *
-		 * @param n {number} - 1-indexed index for the Elite 4 or Champion fight or 0 for a regular gym.
+		 * @param n {number|string} - 1-indexed index for the Elite 4
+		 *                            or Champion fight or 0 for a regular gym.
+		 *                            Or the name of the gym to find
+		 *                            as a string.
 		 */
 		startGym(n=0) {
 			if (App.game.gameState != GameConstants.GameState.town) {
@@ -59,8 +83,12 @@
 		/**
 		 * Check if the player is currently at a town with a gym.
 		 *
-		 * @param n {number} - 1-indexed index for the Elite 4 or Champion fight or 0 for a regular gym.
-		 * @return           - Truthy if the player is at a gym. Falsey if not.
+		 * @param n {number|string} - 1-indexed index for the Elite 4
+		 *                            or Champion fight or 0 for a regular gym.
+		 *                            Or the name of the gym to find
+		 *                            as a string.
+		 * @return                  - Truthy if the player is at a gym.
+		 *                            Falsey if not.
 		 */
 		canStartGym(n=0) {
 			return App.game.gameState == GameConstants.GameState.town && this._getGym(n);
@@ -69,7 +97,11 @@
 		/**
 		 * Check how many times the player has completed the current gym.
 		 *
-		 * @return {number} - Number of clears.
+		 * @param n {number|string} - 1-indexed index for the Elite 4
+		 *                            or Champion fight or 0 for a regular gym.
+		 *                            Or the name of the gym to find
+		 *                            as a string.
+		 * @return  {number}        - Number of clears.
 		 */
 		getGymClears(n=0) {
 			const name = this._getGym(n).town;
@@ -179,7 +211,7 @@
 
 	function cmdElite(idx, clearCount=100) {
 		if (typeof idx != "number") {
-			throw new Error("Paramater idx should be a number");
+			throw new Error("Parameter idx should be a number");
 		}
 
 		if (idx < 1 || idx > 5) {
@@ -194,10 +226,42 @@
 		scheduleTick(DELAY_INIT);
 	}
 
+	/**
+	 * Script interoperability command.
+	 * Clear the selected gym the given number of times.
+	 *
+	 * @param gymName {string} - Name of the gym to clear.
+	 *                           This should be at the player's current town.
+	 * @param count   {number} - Number of times the gym should be cleared.
+	 */
+	cmdScriptClearGym(gymName, count=1) {
+		currentTask = new GymTask(count, gymName);
+		scheduleTick(DELAY_INIT);
+	}
+
+	/**
+	 * Check if the script is busy, and should receive new commands now.
+	 *
+	 * @return {boolean} - True if there is an active command. False if not.
+	 */
+	cmdBusy() {
+		return currentTask != null;
+	}
+
 	(function main() {
 		window[WINDOW_KEY] = {
 			run:   cmdRun,
 			elite: cmdElite,
 		};
+
+		if (!window.syfScripts) {
+			window.syfScripts = {};
+		}
+
+		window.syfScripts.gym = {
+			canClearGyms() { return true; },
+			busy: cmdBusy,
+			clearGym: cmdScriptClearGym,
+		}
 	})();
 })();
