@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.17
+// @version      0.17.1
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -1086,7 +1086,7 @@
 	 * @param value - Truthy to actively attempt to complete quests,
 	 *                falsey to not.
 	 */
-	function cmdActiveQuests(value) {
+	function cmdActiveQuests(value=true) {
 		Setting.collectQuests.set(!!value);
 		Setting.startQuests.set(!!value);
 
@@ -1108,7 +1108,7 @@
 	 * @param value - Truthy to attempt to complete quests,
 	 *                falsey to not.
 	 */
-	function cmdPassiveQuests(value) {
+	function cmdPassiveQuests(value=true) {
 		Setting.collectQuests.set(!!value);
 		Setting.startQuests.set(!!value);
 
