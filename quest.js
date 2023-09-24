@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.15.3
+// @version      0.16
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -23,6 +23,7 @@
 		MINE_ITEMS:     "mine items",
 		MINE_LAYERS:    "mine layers",
 		POKEDOLLARS:    "pokedollars",
+		ROUTE_DEFEAT:   "route defeat",
 		USE_POKEBALL:   "use pokeball",
 
 		// Any quest types not yet handled by the script
@@ -218,6 +219,12 @@
 						type: QuestType.USE_POKEBALL,
 						ball: GameConstants.Pokeball[quest.pokeball],
 						amount: quest.amount,
+					};
+
+				case DefeatPokemonsQuest:
+					return {
+						type: QuestType.ROUTE_DEFEAT,
+						route: Routes.getRoute(quest.region, quest.route).routeName,
 					};
 
 				default:
@@ -771,6 +778,10 @@
 
 			case QuestType.HATCH_EGGS:
 				return window.syfScripts?.breeder?.canCompleteEggsQuest?.();
+
+			case QuestType.ROUTE_DEFEAT:
+				return (page.isOnRoute()
+						&& quest.route == page.getCurrentRoute());
 
 			default:
 				return false;
