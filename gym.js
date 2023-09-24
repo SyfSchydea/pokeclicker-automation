@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Gym Runner
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.3.1
 // @description  Runs gyms automatically.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -234,7 +234,7 @@
 	 *                           This should be at the player's current town.
 	 * @param count   {number} - Number of times the gym should be cleared.
 	 */
-	cmdScriptClearGym(gymName, count=1) {
+	function cmdScriptClearGym(gymName, count=1) {
 		currentTask = new GymTask(count, gymName);
 		scheduleTick(DELAY_INIT);
 	}
@@ -244,7 +244,7 @@
 	 *
 	 * @return {boolean} - True if there is an active command. False if not.
 	 */
-	cmdBusy() {
+	function cmdBusy() {
 		return currentTask != null;
 	}
 
