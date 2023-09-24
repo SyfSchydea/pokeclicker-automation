@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.17.1
+// @version      0.17.2
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -558,7 +558,8 @@
 			const route = this._getRouteByName(routeName);
 			const regionId = route.region;
 			const subregionId = route.subRegion ?? 0;
-			const subregion = SubRegions.getSubRegionById(regionId, subregion);
+			const subregion = SubRegions.getSubRegionById(
+					regionId, subregionId);
 			return subregion.name;
 		},
 
