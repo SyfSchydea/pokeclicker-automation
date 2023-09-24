@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Dungeon Crawler
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.6
 // @description  Completes dungeons automatically.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -688,11 +688,43 @@
 		console.log("Attempting to clear", dungeonName, currentTask.remainingClears, "times. Focusing on enemies.");
 	}
 
+	/**
+	 * Script interoperability command.
+	 * Check if the script is busy doing something.
+	 *
+	 * @return {boolean} - True if the script is doing something. False if not.
+	 */
+	function cmdBusy() {
+		return currentTask != null;
+	}
+
+	/**
+	 * Script interoperability command.
+	 * Clear the current dungeon the specified number of times.
+	 *
+	 * @param amount {number} - Number of times to clear the dungeon.
+	 */
+	function cmdScriptClearDungeon(amount) {
+		const dungeonName = page.getCurrentDungeonName();
+		currentTask = new DungeonClearTask(dungeonName, amount);
+		scheduleTick(DELAY_INITIAL);
+	}
+
 	(function main() {
 		window.dung = {
 			run: cmdRun,
 			items: cmdItems,
 			enemy: cmdEnemy,
+		};
+
+		if (!window.syfScripts) {
+			window.syfScripts = {};
+		}
+
+		window.syfScripts.dungeonCrawler = {
+			canClearDungeons() { return true; },
+			busy: cmdBusy,
+			clearDungeon: cmdScriptClearDungeon,
 		};
 	})();
 })();

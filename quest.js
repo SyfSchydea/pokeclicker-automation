@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.18.7
+// @version      0.19
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -17,6 +17,7 @@
 		CATCH_POKEMON:  "catch",
 		CATCH_SHINIES:  "shiny",
 		CATCH_TYPED:    "catch typed",
+		CLEAR_DUNGEON:  "clear dungeon",
 		DUNGEON_TOKENS: "dungeon tokens",
 		FARM_POINTS:    "farm points",
 		GYM:            "gym",
@@ -244,6 +245,13 @@
 					details = {
 						type: QuestType.GYM,
 						gym: quest.gymTown,
+					};
+					break;
+
+				case DefeatDungeonQuest:
+					details = {
+						type: QuestType.CLEAR_DUNGEON,
+						dungeon: quest.dungeon,
 					};
 					break;
 
@@ -700,6 +708,37 @@
 		getGymTownName(gymName) {
 			return GymList[gymName].parent.name;
 		},
+
+		/**
+		 * Check if the player has previously beaten the given dungeon.
+		 *
+		 * @param dungeonName {string} - Name of the dungeon to look up.
+		 * @return                     - Truthy if the dungeon has been
+		 *                               cleared. Falsey if not.
+		 */
+		dungeonCompleted(dungeonName) {
+			const dungIdx = GameConstants.getDungeonIndex(dungeonName);
+			return App.game.statistics.dungeonsCleared[dungIdx]() > 0;
+		},
+
+		/**
+		 * Find how many dungeon tokens entry to the given dungeon costs.
+		 *
+		 * @param dungeonName {string} - Name of the dungeon to look up.
+		 * @return            {number} - Dungeon cost in dungeon tokens.
+		 */
+		getDungeonCost(dungeonName) {
+			return dungeonList[dungeonName].tokenCost;
+		},
+
+		/**
+		 * Check how many dungeon tokens the player has.
+		 *
+		 * @return {number} - Number of dungeon tokens.
+		 */
+		getDungeonTokens() {
+			return App.game.wallet.currencies[Currency.dungeonToken]();
+		},
 	};
 
 	page._populateTypedEncounters();
@@ -1044,6 +1083,7 @@
 
 			case QuestType.GYM: {
 				if (!Setting.activeMovement.get()
+						|| page.gymCompleted(quest.gym)
 						|| !window.syfScripts?.gym?.canClearGyms?.()) {
 					return false;
 				}
@@ -1056,6 +1096,18 @@
 				}
 
 				return Setting.currentPosition.get() == null;
+			}
+
+			case QuestType.CLEAR_DUNGEON: {
+				if (!page.dungeonCompleted(quest.dungeon)
+						|| !window.syfScript?.dungeonCrawler?.canClearDungeons?.()
+						|| !canAffordDungeonRuns(quest.dungeon, quest.amountRemaining)){
+					return false;
+				}
+
+				const dungeonTown = new TownLocation(quest.dungeon);
+				return (dungeonTown.equals(getPlayerLocation())
+						|| dungeonTown.canMoveTo());
 			}
 
 			default:
@@ -1154,6 +1206,11 @@
 		Setting.currentPosition.set(loc);
 	}
 
+	function canAffordDungeonRuns(dungeonName, count) {
+		const dtCost = page.getDungeonCost(dungeonName) * count;
+		return page.getDungeonTokens() >= dtCost;
+	}
+
 	function updateActiveMovement() {
 		if (!canMove()) {
 			return false;
@@ -1213,6 +1270,34 @@
 						moveToActiveLocation(gymTown);
 						return true;
 					}
+
+					continue;
+				}
+
+				case QuestType.CLEAR_DUNGEON: {
+					if (!page.dungeonCompleted(quest.dungeon)
+							|| !window.syfScript?.dungeonCrawler?.canClearDungeons?.()
+							|| !canAffordDungeonRuns(quest.dungeon, quest.amountRemaining)){
+						continue;
+					}
+
+					const dungeonTown = new TownLocation(quest.dungeon);
+					if (dungeonTown.equals(playerLoc)) {
+						if (window.syfScript.dungeonCrawler.busy()) {
+							return false;
+						}
+
+						window.syfScript.dungeonCrawler.clearDungeon(
+								quest.amountRemaining);
+						return true;
+					}
+
+					if (dungeonTown.canMoveTo()) {
+						moveToActiveLocation(dungeonTown);
+						return true;
+					}
+
+					continue;
 				}
 			}
 		}
