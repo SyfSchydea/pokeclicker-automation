@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.18.3
+// @version      0.18.4
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -791,7 +791,7 @@
 		}
 
 		getSubregion() {
-			return page.getRouteSubregion(this.name);
+			return page.getTownSubregion(this.name);
 		}
 
 		canMoveTo() {
