@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.18.2
+// @version      0.18.3
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -1048,7 +1048,7 @@
 					return false;
 				}
 
-				const gymTownName = page.getGymTown(quest.gym);
+				const gymTownName = page.getGymTownName(quest.gym);
 				const gymTown = new TownLocation(gymTownName);
 				if (!gymTown.equals(getPlayerLocation())
 						&& !gymTown.canMoveTo()) {
@@ -1197,7 +1197,7 @@
 						continue;
 					}
 
-					const gymTownName = page.getGymTown(quest.gym);
+					const gymTownName = page.getGymTownName(quest.gym);
 					const gymTown = new TownLocation(gymTownName);
 					if (gymTown.equals(playerLoc)) {
 						if (window.syfScripts.gym.busy?.()) {
