@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.18.1
+// @version      0.18.2
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -724,6 +724,85 @@
 
 	const POKEBALL_FILTER_REGULAR_NAME = "!syfQuest caught";
 
+	// Represents either a route or a town
+	class Location {
+		constructor(type, name) {
+			this.type = type;
+			this.name = name;
+		}
+
+		// abstract getSubregion()
+		// abstract moveTo()
+
+		canMoveTo() {
+			// We aren't (yet) moving between subregions
+			const playerLoc = getPlayerLocation();
+			return this.getSubregion() != playerLoc.getSubregion();
+		}
+
+		equals(that) {
+			return (that instanceof Location
+					&& that.type == this.type
+					&& that.name == this.name);
+		}
+
+		// Convert a simple object with type and name properties
+		// to a Location subclass object
+		static fromRaw(obj) {
+			if (obj == null) {
+				return null;
+			}
+
+			switch (obj.type) {
+				case "route":
+					return new RouteLocation(obj.name);
+
+				case "town":
+					return new TownLocation(obj.name);
+
+				default:
+					throw new Error("Invalid location type: " + obj.type);
+			}
+		}
+	}
+
+	class RouteLocation extends Location {
+		constructor(routeName) {
+			super("route", routeName);
+		}
+
+		getSubregion() {
+			return page.getRouteSubregion(this.name);
+		}
+
+		canMoveTo() {
+			// Avoid going to routes which haven't yet been completed
+			return super.canMoveTo() && page.routeCompleted(this.name);
+		}
+
+		moveTo() {
+			page.moveToRoute(this.name);
+		}
+	}
+
+	class TownLocation extends Location {
+		constructor(townName) {
+			super("town", townName);
+		}
+
+		getSubregion() {
+			return page.getRouteSubregion(this.name);
+		}
+
+		canMoveTo() {
+			return super.canMoveTo() && page.townUnlocked(this.name);
+		}
+
+		moveTo() {
+			page.moveToTown(this.name);
+		}
+	}
+
 	const SETTINGS_SCOPE_SAVE = {
 		storage: localStorage,
 		getKey: () => "syfschydea--quest--settings--" + page.getSaveKey(),
@@ -868,85 +947,6 @@
 
 		FilterType.all.push(filter);
 		FilterType.byPokemonType[type] = filter;
-	}
-
-	// Represents either a route or a town
-	class Location {
-		constructor(type, name) {
-			this.type = type;
-			this.name = name;
-		}
-
-		// abstract getSubregion()
-		// abstract moveTo()
-
-		canMoveTo() {
-			// We aren't (yet) moving between subregions
-			const playerLoc = getPlayerLocation();
-			return this.getSubregion() != playerLoc.getSubregion();
-		}
-
-		equals(that) {
-			return (that instanceof Location
-					&& that.type == this.type
-					&& that.name == this.name);
-		}
-
-		// Convert a simple object with type and name properties
-		// to a Location subclass object
-		static fromRaw(obj) {
-			if (obj == null) {
-				return null;
-			}
-
-			switch (obj.type) {
-				case "route":
-					return new RouteLocation(obj.name);
-
-				case "town":
-					return new TownLocation(obj.name);
-
-				default:
-					throw new Error("Invalid location type: " + obj.type);
-			}
-		}
-	}
-
-	class RouteLocation extends Location {
-		constructor(routeName) {
-			super("route", routeName);
-		}
-
-		getSubregion() {
-			return page.getRouteSubregion(this.name);
-		}
-
-		canMoveTo() {
-			// Avoid going to routes which haven't yet been completed
-			return super.canMoveTo() && page.routeCompleted(this.name);
-		}
-
-		moveTo() {
-			page.moveToRoute(this.name);
-		}
-	}
-
-	class TownLocation extends Location {
-		constructor(townName) {
-			super("town", townName);
-		}
-
-		getSubregion() {
-			return page.getRouteSubregion(this.name);
-		}
-
-		canMoveTo() {
-			return super.canMoveTo() && page.townUnlocked(this.name);
-		}
-
-		moveTo() {
-			page.moveToTown(this.name);
-		}
 	}
 
 	function getPlayerLocation() {
