@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.18
+// @version      0.18.1
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -622,7 +622,7 @@
 			const subregion = SubRegions.getSubRegionById(
 					town.region, town.subRegion);
 			return subregion.name;
-		}
+		},
 
 		/**
 		 * Move the the given route within the same subregion.
