@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.18.6
+// @version      0.18.7
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -620,7 +620,7 @@
 		getTownSubregion(townName) {
 			const town = TownList[townName];
 			const subregion = SubRegions.getSubRegionById(
-					town.region, town.subRegion);
+					town.region, town.subRegion ?? 0);
 			return subregion.name;
 		},
 
@@ -633,7 +633,7 @@
 			const route = this._getRouteByName(routeName);
 
 			if (route.region != player.region
-					|| (route.subRegion ?? 0) != player.subRegion) {
+					|| (route.subRegion ?? 0) != (player.subRegion ?? 0)) {
 				throw new Error("moveToRoute cannot move between subregions");
 			}
 
@@ -649,7 +649,7 @@
 			const town = TownList[townName];
 
 			if (town.region != player.region
-					|| town.subRegion != player.subRegion) {
+					|| (town.subRegion ?? 0) != (player.subRegion ?? 0)) {
 				throw new Error("moveToTown cannot move between subregions");
 			}
 
