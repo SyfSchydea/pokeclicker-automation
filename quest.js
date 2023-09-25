@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.19
+// @version      0.19.0.1
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -1099,9 +1099,15 @@
 			}
 
 			case QuestType.CLEAR_DUNGEON: {
-				if (!page.dungeonCompleted(quest.dungeon)
-						|| !window.syfScript?.dungeonCrawler?.canClearDungeons?.()
-						|| !canAffordDungeonRuns(quest.dungeon, quest.amountRemaining)){
+				if (!page.dungeonCompleted(quest.dungeon)) {
+					return false;
+				}
+
+				if (!window.syfScript?.dungeonCrawler?.canClearDungeons?.()) {
+					return false;
+				}
+
+				if (!canAffordDungeonRuns(quest.dungeon, quest.amountRemaining)) {
 					return false;
 				}
 
