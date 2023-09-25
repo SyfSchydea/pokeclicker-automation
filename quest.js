@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.19.5
+// @version      0.19.5+better-shiny-balls
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -917,8 +917,26 @@
 			this.name = name;
 			this.options = options;
 
+			this.pokeballPreferences = [];
+
 			this.settingCreated = new Setting(SETTINGS_SCOPE_SESSION, settingsKey, false);
 			this.isRequired = false;
+		}
+
+		/**
+		 * Set the list of pokeballs to use when creating this type of filter.
+		 * Earlier entries are considered first.
+		 * If no entries match, regular pokeballs will be used instead.
+		 * Entries should have the form: {
+		 *   ball: string,
+		 *   amountRequired: number?,
+		 * }
+
+		 * This method returns the original FilterType to allow for chaining.
+		 */
+		setPokeballPreferences(list) {
+			this.pokeballPreferences = list;
+			return this;
 		}
 
 		addFilter(ball=null) {
@@ -937,6 +955,14 @@
 
 			if (ball != null) {
 				page.setFilterBall(filterUuid, ball);
+			} else {
+				for (const pref of this.pokeballPreferences) {
+					if (pref.amountRequired == null
+							|| page.getPokeballAmount(pref.ball) >= pref.amountRequired) {
+						page.setFilterBall(filterUuid, pref.ball);
+						break;
+					}
+				}
 			}
 
 			this.settingCreated.set(true);
@@ -981,7 +1007,11 @@
 				shiny: true,
 				caughtShiny: true,
 			},
-			"hasShinyFilter"),
+			"hasShinyFilter")
+			.setPokeballPreferences([
+				{ball: "Ultraball", amountRequired: 100},
+				{ball: "Greatball", amountRequired: 100},
+			]),
 	];
 
 	FilterType.byPokemonType = {};
