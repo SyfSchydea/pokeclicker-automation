@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.20
+// @version      0.20+issue19
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -1147,7 +1147,7 @@
 
 			case QuestType.GYM: {
 				if (!Setting.activeMovement.get()
-						|| page.gymCompleted(quest.gym)
+						|| !page.gymCompleted(quest.gym)
 						|| !window.syfScripts?.gym?.canClearGyms?.()) {
 					return false;
 				}
