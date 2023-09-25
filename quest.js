@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.19.1
+// @version      0.19.2
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -1099,6 +1099,10 @@
 			}
 
 			case QuestType.CLEAR_DUNGEON: {
+				if (!Setting.activeMovement.get()) {
+					return false;
+				}
+
 				if (!page.dungeonCompleted(quest.dungeon)) {
 					return false;
 				}
