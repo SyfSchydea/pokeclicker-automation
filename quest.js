@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.19.0.1
+// @version      0.19.1
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -1103,7 +1103,7 @@
 					return false;
 				}
 
-				if (!window.syfScript?.dungeonCrawler?.canClearDungeons?.()) {
+				if (!window.syfScripts?.dungeonCrawler?.canClearDungeons?.()) {
 					return false;
 				}
 
@@ -1282,18 +1282,18 @@
 
 				case QuestType.CLEAR_DUNGEON: {
 					if (!page.dungeonCompleted(quest.dungeon)
-							|| !window.syfScript?.dungeonCrawler?.canClearDungeons?.()
+							|| !window.syfScripts?.dungeonCrawler?.canClearDungeons?.()
 							|| !canAffordDungeonRuns(quest.dungeon, quest.amountRemaining)){
 						continue;
 					}
 
 					const dungeonTown = new TownLocation(quest.dungeon);
 					if (dungeonTown.equals(playerLoc)) {
-						if (window.syfScript.dungeonCrawler.busy()) {
+						if (window.syfScripts.dungeonCrawler.busy()) {
 							return false;
 						}
 
-						window.syfScript.dungeonCrawler.clearDungeon(
+						window.syfScripts.dungeonCrawler.clearDungeon(
 								quest.amountRemaining);
 						return true;
 					}
