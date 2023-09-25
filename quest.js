@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.19.4
+// @version      0.19.5
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -633,6 +633,17 @@
 		},
 
 		/**
+		 * Fetch the subregion which the player is currently in.
+		 *
+		 * @return {string} - Name of the subregion the player is in.
+		 */
+		getPlayerSubregion() {
+			const subregion = SubRegions.getSubRegionById(
+					player.region, player.subregion ?? 0);
+			return subregion.name;
+		},
+
+		/**
 		 * Move the the given route within the same subregion.
 		 *
 		 * @param routeName {string} - Name of the route to move to.
@@ -775,8 +786,7 @@
 
 		canMoveTo() {
 			// We aren't (yet) moving between subregions
-			const playerLoc = getPlayerLocation();
-			return this.getSubregion() == playerLoc.getSubregion();
+			return this.getSubregion() == page.getPlayerSubregion();
 		}
 
 		equals(that) {
@@ -1091,7 +1101,7 @@
 				const gymTownName = page.getGymTownName(quest.gym);
 				const gymTown = new TownLocation(gymTownName);
 				if (!gymTown.equals(getPlayerLocation())
-						&& !gymTown.canMoveTo()) {
+						&& (!canMove() || !gymTown.canMoveTo())) {
 					return false;
 				}
 
@@ -1117,7 +1127,7 @@
 
 				const dungeonTown = new TownLocation(quest.dungeon);
 				return (dungeonTown.equals(getPlayerLocation())
-						|| dungeonTown.canMoveTo());
+						|| (canMove() && dungeonTown.canMoveTo()));
 			}
 
 			default:
