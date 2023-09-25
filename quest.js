@@ -607,10 +607,10 @@
 						continue;
 					}
 
-					if (!(t in typesEncountered)) {
-						typesEncountered[t] = 1;
+					if (!(type in typesEncountered)) {
+						typesEncountered[type] = 1;
 					} else {
-						typesEncountered[t] += 1;
+						typesEncountered[type] += 1;
 					}
 				}
 			}
@@ -645,10 +645,10 @@
 		 * @return     {SubRegion} - Subregion object.
 		 */
 		_getSubregion(name) {
-			for (const regionalList of Object.values(SubRegions.list)) {
+			for (const [regionId, regionalList] of Object.entries(SubRegions.list)) {
 				for (const subr of regionalList) {
 					if (subr.name == name) {
-						return subr;
+						return {regionId, subregion: subr};
 					}
 				}
 			}
@@ -664,10 +664,11 @@
 		 *                                   in that subregion.
 		 */
 		getRoutesBySubregion(subregionName) {
-			const subregion = this._getSubregion(subregionName);
+			const {regionId, subregion} = this._getSubregion(subregionName);
 			return Routes.regionRoutes.filter(r =>
-					r.region == subregion.region
-					&& (r.subRegion ?? 0) == subregion.id);
+					r.region == +regionId
+					&& (r.subRegion ?? 0) == subregion.id)
+				.map(r => r.routeName);
 		},
 
 		/**
@@ -1288,8 +1289,8 @@
 		const playerSubr = page.getPlayerSubregion();
 		const localRoutes = page.getRoutesBySubregion(playerSubr);
 
-		const bestRoute = null;
-		const bestFrequency = 0;
+		let bestRoute = null;
+		let bestFrequency = 0;
 		for (const route of localRoutes) {
 			const typesEncountered = page.getTypesEncounteredOnRoute(route);
 			if (!(pkmnType in typesEncountered)) {
@@ -1303,7 +1304,7 @@
 			}
 		}
 
-		return bestRoute;
+		return new RouteLocation(bestRoute);
 	}
 
 	function updateActiveMovement() {
@@ -1353,7 +1354,7 @@
 						continue;
 					}
 
-					moveToActiveLocation(questLoc);
+					moveToActiveLocation(questRoute);
 					return true;
 				}
 
