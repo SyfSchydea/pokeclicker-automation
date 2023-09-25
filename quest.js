@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.19.5+active-catch-type
+// @version      0.20
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
