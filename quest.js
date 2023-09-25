@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.20.1+better-shiny-balls
+// @version      0.21
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
