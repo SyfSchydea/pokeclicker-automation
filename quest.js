@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.19.5
+// @version      0.19.5+active-catch-type
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -585,22 +585,40 @@
 		/**
 		 * Find which pokemon types will be encountered on the given route.
 		 *
-		 * @param routeName {string}      - Name of the route to look up.
-		 * @return          {Set(string)} - Set of pokemon types encountered.
+		 * @param routeName {string} - Name of the route to look up.
+		 * @return          {Object} - Mapping of pokemon types encountered
+		 *                             as strings to proportion of
+		 *                             encounters with that type.
 		 */
 		getTypesEncounteredOnRoute(routeName) {
 			const route = this._getRouteByName(routeName);
 			const pokemonEncountered = RouteHelper.getAvailablePokemonList(
 					route.number, route.region);
 
-			const typesEncountered = new Set();
+			const typesEncountered = {};
 			for (const name of pokemonEncountered) {
 				const pkmn = PokemonHelper.getPokemonByName(name);
-				typesEncountered.add(PokemonType[pkmn.type1]);
-				typesEncountered.add(PokemonType[pkmn.type2]);
+				const types = [pkmn.type1, pkmn.type2];
+
+				for (const typeId of types) {
+					const type = PokemonType[typeId];
+
+					if (type == "None") {
+						continue;
+					}
+
+					if (!(t in typesEncountered)) {
+						typesEncountered[t] = 1;
+					} else {
+						typesEncountered[t] += 1;
+					}
+				}
 			}
 
-			typesEncountered.delete("None");
+			for (const type of Object.keys(typesEncountered)) {
+				typesEncountered[type] /= pokemonEncountered.length;
+			}
+
 			return typesEncountered;
 		},
 
@@ -617,6 +635,39 @@
 			const subregion = SubRegions.getSubRegionById(
 					regionId, subregionId);
 			return subregion.name;
+		},
+
+		/**
+		 * Not required by interface.
+		 * Fetch the subregion object by name.
+		 *
+		 * @param name {string}    - Name of the subregion to look up.
+		 * @return     {SubRegion} - Subregion object.
+		 */
+		_getSubregion(name) {
+			for (const regionalList of Object.values(SubRegions.list)) {
+				for (const subr of regionalList) {
+					if (subr.name == name) {
+						return subr;
+					}
+				}
+			}
+
+			throw new Error("Failed to find subregion: " + name);
+		},
+
+		/**
+		 * Fetch a list of routes in the given subregion.
+		 *
+		 * @param subregionName {string}   - Name of the subregion to look up.
+		 * @return              {string[]} - List of names of routes
+		 *                                   in that subregion.
+		 */
+		getRoutesBySubregion(subregionName) {
+			const subregion = this._getSubregion(subregionName);
+			return Routes.regionRoutes.filter(r =>
+					r.region == subregion.region
+					&& (r.subRegion ?? 0) == subregion.id);
 		},
 
 		/**
@@ -1029,7 +1080,8 @@
 
 		const currentRoute = page.getCurrentRoute();
 		const typesEncountered = page.getTypesEncounteredOnRoute(currentRoute);
-		return typesEncountered.has(pokemonType);
+		return pokemonType in typesEncountered
+				&& typesEncountered[pokemonType] > 0;
 	}
 
 	function questIsEligible(questIdx) {
@@ -1069,7 +1121,8 @@
 					return false;
 				}
 
-				return willEncounterTypeOnCurrentRoute(quest.pokemonType);
+				return (willEncounterTypeOnCurrentRoute(quest.pokemonType)
+						|| Setting.activeMovement.get());
 
 			case QuestType.USE_POKEBALL:
 				return (page.getPokeballAmount(quest.ball) >= quest.amount
@@ -1231,6 +1284,28 @@
 		return page.getDungeonTokens() >= dtCost;
 	}
 
+	function findBestRouteForType(pkmnType) {
+		const playerSubr = page.getPlayerSubregion();
+		const localRoutes = page.getRoutesBySubregion(playerSubr);
+
+		const bestRoute = null;
+		const bestFrequency = 0;
+		for (const route of localRoutes) {
+			const typesEncountered = page.getTypesEncounteredOnRoute(route);
+			if (!(pkmnType in typesEncountered)) {
+				continue;
+			}
+
+			const freq = typesEncountered[pkmnType];
+			if (freq > bestFrequency) {
+				bestRoute = route;
+				bestFrequency = freq;
+			}
+		}
+
+		return bestRoute;
+	}
+
 	function updateActiveMovement() {
 		if (!canMove()) {
 			return false;
@@ -1261,6 +1336,20 @@
 					}
 
 					if (!questLoc.canMoveTo()) {
+						continue;
+					}
+
+					moveToActiveLocation(questLoc);
+					return true;
+				}
+
+				case QuestType.CATCH_TYPED: {
+					if (willEncounterTypeOnCurrentRoute(quest.pokemonType)) {
+						return false;
+					}
+
+					const questRoute = findBestRouteForType(quest.pokemonType);
+					if (questRoute == null || !questRoute.canMoveTo()) {
 						continue;
 					}
 
