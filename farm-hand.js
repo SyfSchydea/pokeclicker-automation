@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.41
+// @version      1.42
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -1034,6 +1034,15 @@
 		unlockPlot(plotIdx) {
 			this._getFarmingModule().unlockPlot(plotIdx);
 		},
+
+		/**
+		 * Fetch the save key of the currently loaded save.
+		 *
+		 * @return {string} - Save key if currently logged in, or an empty string if not.
+		 */
+		getSaveKey() {
+			return Save.key;
+		},
 	};
 
 	//////////////////////////
@@ -1235,6 +1244,58 @@
 			.filter(o => o.plotBerry == berry)
 			.map(o => o.plotIdx));
 	}
+
+	const SETTINGS_SCOPE_SAVE = {
+		storage: localStorage,
+		getKey: () => "syfschydea--farm--settings--" + page.getSaveKey(),
+	};
+	const SETTINGS_SCOPE_SESSION = {
+		storage: sessionStorage,
+		getKey: () => "syfschydea--farm--settings",
+	};
+
+	/**
+	 * Holds info about a single value which exists in settings.
+	 */
+	class Setting {
+		// readFn may be passed to process the raw value when reading
+		constructor(scope, key, defaultVal, readFn=x=>x) {
+			this.scope = scope;
+			this.key = key;
+			this.defaultVal = defaultVal;
+			this.readFn = readFn;
+		}
+
+		_read() {
+			const settingsJson = this.scope.storage.getItem(
+					this.scope.getKey());
+
+			if (!settingsJson) {
+				return {};
+			}
+
+			return JSON.parse(settingsJson);
+		}
+
+		get() {
+			const settings = this._read();
+
+			if (!(this.key in settings)) {
+				return this.defaultVal;
+			}
+
+			return this.readFn(settings[this.key]);
+		}
+
+		set(val) {
+			const settings = this._read();
+			settings[this.key] = val;
+			this.scope.storage.setItem(this.scope.getKey(),
+					JSON.stringify(settings));
+		}
+	}
+
+	Setting.doFarmingQuests = new Setting(SETTINGS_SCOPE_SAVE, "doQuests", true);
 
 	function toTitleCase(str) {
 		return str[0].toUpperCase() + str.slice(1).toLowerCase();
@@ -1532,7 +1593,7 @@
 		}
 
 		hasExpired(unusedNow) {
-			return this.getTargetBerry() == null;
+			return !Setting.doFarmingQuests.get() || this.getTargetBerry() == null;
 		}
 	}
 
@@ -1551,7 +1612,7 @@
 		}
 
 		hasExpired(unusedNow) {
-			return !page.hasFarmPointQuest();
+			return !Setting.doFarmingQuests.get() || !page.hasFarmPointQuest();
 		}
 	}
 
@@ -2462,13 +2523,15 @@
 			}
 		}
 
-		if (priority < PRIORITY_BERRY_QUEST && page.getQuestBerry()) {
+		if (priority < PRIORITY_BERRY_QUEST
+				&& Setting.doFarmingQuests.get() && page.getQuestBerry()) {
 			console.log("Farming for Berry quest");
 			currentTask = new BerryQuestTask();
 			priority = currentTask.priority;
 		}
 
-		if (priority < PRIORITY_POINT_QUEST && page.hasFarmPointQuest()) {
+		if (priority < PRIORITY_POINT_QUEST
+				&& Setting.doFarmingQuests.get() && page.hasFarmPointQuest()) {
 			console.log("Farming for Farm Point quest");
 			currentTask = new FarmPointQuestTask();
 			priority = currentTask.priority;
@@ -2703,10 +2766,33 @@
 	}
 
 	/**
+	 * User-facing command.
+	 * Set whether or not farming related quests should be completed automatically.
+	 *
+	 * @param value - Truthy to complete quests. Falsey to not.
+	 */
+	function cmdDoQuests(value=true) {
+		Setting.doFarmingQuests.set(!!value);
+		console.log((value? "Resumed" : "Stopped"), "completing farming quests");
+	}
+
+	/**
+	 * Script interoperability function.
+	 * Check if the script is currently able to farm for farm point quests
+	 */
+	function cmdCanDoFarmPointQuests() {
+		return Setting.doFarmingQuests.get();
+	}
+
+	/**
 	 * Script interoperability function.
 	 * Check if the script is currently able to farm the given berry.
 	 */
 	function cmdCanFarmBerry(berryName) {
+		if (!Setting.doFarmingQuests.get()) {
+			return false;
+		}
+
 		// We can always farm, Kasib, even if we don't have any now
 		if (berryName == "Kasib") {
 			return true;
@@ -2743,6 +2829,7 @@
 			mutate: cmdMutate,
 			evolve: cmdEvolve,
 			wander: cmdWander,
+			doQuests: cmdDoQuests,
 		}
 
 		if (!window.syfScripts) {
@@ -2750,7 +2837,7 @@
 		}
 
 		window.syfScripts.farmHand = {
-			canCompleteFarmPointQuest() { return true; },
+			canCompleteFarmPointQuest: cmdCanDoFarmPointQuests,
 			canCompleteBerryQuest: cmdCanFarmBerry,
 		};
 
