@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.21
+// @version      0.21.1
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -1301,13 +1301,15 @@
 		return page.isOnRoute() || page.isInTown();
 	}
 
-	function moveToActiveLocation(loc) {
+	function moveToActiveLocation(loc, reason=null) {
 		if (Setting.returnPosition.get() == null) {
 			Setting.returnPosition.set(getPlayerLocation());
 		}
 
 		loc.moveTo();
 		Setting.currentPosition.set(loc);
+
+		console.log("Moving to", loc.name, ...(reason? ["for", reason] : []));
 	}
 
 	function canAffordDungeonRuns(dungeonName, count) {
@@ -1370,7 +1372,7 @@
 						continue;
 					}
 
-					moveToActiveLocation(questLoc);
+					moveToActiveLocation(questLoc, "route quest");
 					return true;
 				}
 
@@ -1384,7 +1386,7 @@
 						continue;
 					}
 
-					moveToActiveLocation(questRoute);
+					moveToActiveLocation(questRoute, quest.pokemonType + " quest");
 					return true;
 				}
 
@@ -1407,7 +1409,7 @@
 					}
 
 					if (gymTown.canMoveTo()) {
-						moveToActiveLocation(gymTown);
+						moveToActiveLocation(gymTown, "gym quest");
 						return true;
 					}
 
@@ -1433,7 +1435,7 @@
 					}
 
 					if (dungeonTown.canMoveTo()) {
-						moveToActiveLocation(dungeonTown);
+						moveToActiveLocation(dungeonTown, "dungeon quest");
 						return true;
 					}
 
@@ -1448,6 +1450,7 @@
 			returnPos.moveTo();
 			Setting.returnPosition.set(null);
 			Setting.currentPosition.set(null);
+			console.log("Returning to", returnPos.name);
 			return true;
 		}
 	}
