@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.22
+// @version      1.0
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -20,6 +20,7 @@
 		CLEAR_DUNGEON:  "clear dungeon",
 		DUNGEON_TOKENS: "dungeon tokens",
 		FARM_POINTS:    "farm points",
+		GEMS:           "gems",
 		GYM:            "gym",
 		HATCH_EGGS:     "hatch eggs",
 		MINE_ITEMS:     "mine items",
@@ -219,6 +220,13 @@
 				case CapturePokemonTypesQuest:
 					details = {
 						type: QuestType.CATCH_TYPED,
+						pokemonType: PokemonType[quest.type],
+					};
+					break;
+
+				case GainGemsQuest:
+					details = {
+						type: QuestType.GEMS,
 						pokemonType: PokemonType[quest.type],
 					};
 					break;
@@ -1172,6 +1180,8 @@
 					return false;
 				}
 
+			// Intentional Fall-through
+			case QuestType.GEMS:
 				return (willEncounterTypeOnCurrentRoute(quest.pokemonType)
 						|| Setting.activeMovement.get());
 
@@ -1396,6 +1406,7 @@
 					return true;
 				}
 
+				case QuestType.GEMS:
 				case QuestType.CATCH_TYPED: {
 					if (willEncounterTypeOnCurrentRoute(quest.pokemonType)) {
 						return false;
