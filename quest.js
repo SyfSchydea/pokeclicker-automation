@@ -649,8 +649,8 @@
 		 * Not required by interface.
 		 * Fetch the subregion object by name.
 		 *
-		 * @param name {string}    - Name of the subregion to look up.
-		 * @return     {SubRegion} - Subregion object.
+		 * @param name {string} - Name of the subregion to look up.
+		 * @return     {Object} - Object containing the id of the containing region and the Subregion object.
 		 */
 		_getSubregion(name) {
 			for (const [regionId, regionalList] of Object.entries(SubRegions.list)) {
@@ -704,7 +704,20 @@
 		},
 
 		/**
-		 * Move the the given route within the same subregion.
+		 * Find the region which contains the given subregion.
+		 *
+		 * @param subregionName {string} - Name of the subregion to look up.
+		 * @return              {string} - Name of the region which contains that region.
+		 */
+		subregionToRegion() {
+			const {regionId, subregion} = this._getSubregion(subregionName);
+
+			// TODO: regionId to region name.
+			throw now Error("TODO");
+		},
+
+		/**
+		 * Move to the given route within the same subregion.
 		 *
 		 * @param routeName {string} - Name of the route to move to.
 		 */
@@ -720,7 +733,7 @@
 		},
 
 		/**
-		 * Move the the given town within the same subregion.
+		 * Move to the given town within the same subregion.
 		 *
 		 * @param townName {string} - Name of the town to move to.
 		 */
@@ -733,6 +746,24 @@
 			}
 
 			MapHelper.moveToTown(townName);
+		},
+
+		/**
+		 * Move to the given subregion within the current region.
+		 *
+		 * @param subregionName {string} - Name of the subregion to move to.
+		 */
+		moveToSubregion(subregionName) {
+			const {regionId, subregion} = this._getSubregion(subregionName);
+
+			if (regionId != player.region) {
+				throw new Error("moveToSubregion cannot move between regions");
+			}
+
+			// TODO: Check you can access that subregion.
+			throw new Error("TODO");
+
+			player.subregion = subregion.id;
 		},
 
 		/**
@@ -865,7 +896,18 @@
 
 		canMoveTo() {
 			// We aren't (yet) moving between subregions
+			// TODO: But now we are! only check for region
 			return this.getSubregion() == page.getPlayerSubregion();
+		}
+
+		_moveToSubregion() {
+			const subr = this.getSubregion();
+			if (subr == page.getPlayerSubregion()) {
+				return false;
+			}
+
+			page.moveToSubregion(subr);
+			return true;
 		}
 
 		equals(that) {
@@ -909,6 +951,10 @@
 		}
 
 		moveTo() {
+			if (this._moveToSubregion()) {
+				return false;
+			}
+
 			page.moveToRoute(this.name);
 		}
 	}
@@ -927,6 +973,10 @@
 		}
 
 		moveTo() {
+			if (this._moveToSubregion()) {
+				return false;
+			}
+
 			page.moveToTown(this.name);
 		}
 	}
