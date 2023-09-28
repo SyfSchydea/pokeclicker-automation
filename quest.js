@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      0.21.1
+// @version      0.22
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -802,6 +802,26 @@
 		getDungeonTokens() {
 			return App.game.wallet.currencies[Currency.dungeonToken]();
 		},
+
+		/**
+		 * Check how much refreshing the quest list would cost.
+		 *
+		 * @return {number} - Number of pokedollars required to refresh quest list.
+		 */
+		getRefreshCost() {
+			return App.game.quests.getRefreshCost().amount;
+		},
+
+		/**
+		 * Attempt to refresh the quest list.
+		 */
+		refreshQuests() {
+			if (!App.game.quests.canAffordRefresh()) {
+				throw new Error("Can't afford a refresh currently");
+			}
+
+			App.game.quests.refreshQuests();
+		},
 	};
 
 	page._populateTypedEncounters();
@@ -823,8 +843,7 @@
 	const DELAY_START_QUEST     =      1000;
 	const DELAY_POKEBALL_FILTER =      1000;
 	const DELAY_MOVEMENT        =      1000;
-
-	const POKEBALL_FILTER_REGULAR_NAME = "!syfQuest caught";
+	const DELAY_REFRESH         =      1000;
 
 	// Represents either a route or a town
 	class Location {
@@ -959,6 +978,7 @@
 
 	Setting.modifyPokeballFilters = new Setting(SETTINGS_SCOPE_SESSION, "pokeballFilters", false);
 	Setting.activeMovement        = new Setting(SETTINGS_SCOPE_SESSION, "activeMovement",  false);
+	Setting.freeRefreshes         = new Setting(SETTINGS_SCOPE_SESSION, "freeRefreshes",   false);
 
 	Setting.currentPosition = new Setting(SETTINGS_SCOPE_SESSION, "currentPosition", null, Location.fromRaw);
 	Setting.returnPosition  = new Setting(SETTINGS_SCOPE_SESSION, "returnPosition",  null, Location.fromRaw);
@@ -1476,6 +1496,14 @@
 			return setTimeout(tick, DELAY_START_QUEST);
 		}
 
+		if (Setting.freeRefreshes.get()
+				&& page.getActiveQuestCount() == 0
+				&& page.getRefreshCost() == 0) {
+			page.refreshQuests();
+			console.log("Using free quest refresh");
+			return setTimeout(tick, DELAY_REFRESH);
+		}
+
 		setTimeout(tick, DELAY_IDLE);
 	}
 
@@ -1548,6 +1576,17 @@
 
 	/**
 	 * User-facing command.
+	 * Set if the script should use free refreshes when there aren't any more quests we can do.
+	 *
+	 * @param value - Truthy to use free refreshes. Falsey to not.
+	 */
+	function cmdFreeRefreshes(value=true) {
+		Setting.freeRefreshes.set(!!value);
+		console.log((value? "Started" : "Stopped"), "using free refreshes");
+	}
+
+	/**
+	 * User-facing command.
 	 * Set if the script should use all available methods
 	 * to actively complete quests or not.
 	 *
@@ -1557,6 +1596,7 @@
 	function cmdActiveQuests(value=true) {
 		Setting.collectQuests.set(!!value);
 		Setting.startQuests.set(!!value);
+		Setting.freeRefreshes.set(!!value);
 
 		if (value) {
 			Setting.modifyPokeballFilters.set(true);
@@ -1607,6 +1647,7 @@
 
 			modifyPokeballFilters: cmdSetPokeballFilters,
 			activeMovement:        cmdSetActiveMovement,
+			freeRefreshes:         cmdFreeRefreshes,
 
 			activeQuests:  cmdActiveQuests,
 			passiveQuests: cmdPassiveQuests,
