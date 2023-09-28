@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.0+subregion-movement
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -649,8 +649,8 @@
 		 * Not required by interface.
 		 * Fetch the subregion object by name.
 		 *
-		 * @param name {string}    - Name of the subregion to look up.
-		 * @return     {SubRegion} - Subregion object.
+		 * @param name {string} - Name of the subregion to look up.
+		 * @return     {Object} - Object containing the id of the containing region and the Subregion object.
 		 */
 		_getSubregion(name) {
 			for (const [regionId, regionalList] of Object.entries(SubRegions.list)) {
@@ -704,7 +704,18 @@
 		},
 
 		/**
-		 * Move the the given route within the same subregion.
+		 * Find the region which contains the given subregion.
+		 *
+		 * @param subregionName {string} - Name of the subregion to look up.
+		 * @return              {string} - Name of the region which contains that region.
+		 */
+		subregionToRegion(subregionName) {
+			const {regionId, subregion} = this._getSubregion(subregionName);
+			return GameConstants.Region[regionId];
+		},
+
+		/**
+		 * Move to the given route within the same subregion.
 		 *
 		 * @param routeName {string} - Name of the route to move to.
 		 */
@@ -720,7 +731,7 @@
 		},
 
 		/**
-		 * Move the the given town within the same subregion.
+		 * Move to the given town within the same subregion.
 		 *
 		 * @param townName {string} - Name of the town to move to.
 		 */
@@ -733,6 +744,25 @@
 			}
 
 			MapHelper.moveToTown(townName);
+		},
+
+		/**
+		 * Move to the given subregion within the current region.
+		 *
+		 * @param subregionName {string} - Name of the subregion to move to.
+		 */
+		moveToSubregion(subregionName) {
+			const {regionId, subregion} = this._getSubregion(subregionName);
+
+			if (regionId != player.region) {
+				throw new Error("moveToSubregion cannot move between regions");
+			}
+
+			if (!subregion.unlocked()) {
+				throw new Error("Cannot access " + subregionName);
+			}
+
+			player.subregion = subregion.id;
 		},
 
 		/**
@@ -861,11 +891,34 @@
 		}
 
 		// abstract getSubregion()
-		// abstract moveTo()
+		// abstract _moveTo()
 
 		canMoveTo() {
-			// We aren't (yet) moving between subregions
-			return this.getSubregion() == page.getPlayerSubregion();
+			// We aren't (yet) moving between regions
+			const thisSubr = this.getSubregion();
+			const playerSubr = page.getPlayerSubregion();
+			return page.subregionToRegion(thisSubr) == page.subregionToRegion(playerSubr);
+		}
+
+		_moveToSubregion() {
+			const subr = this.getSubregion();
+			if (subr == page.getPlayerSubregion()) {
+				return false;
+			}
+
+			page.moveToSubregion(subr);
+			return true;
+		}
+
+		// True if we reached the location.
+		// False if more steps are needed.
+		moveTo() {
+			if (this._moveToSubregion()) {
+				return false;
+			}
+
+			this._moveTo();
+			return true;
 		}
 
 		equals(that) {
@@ -908,7 +961,8 @@
 			return super.canMoveTo() && page.routeCompleted(this.name);
 		}
 
-		moveTo() {
+		// Assumes we are already in the correct subregion
+		_moveTo() {
 			page.moveToRoute(this.name);
 		}
 	}
@@ -926,7 +980,8 @@
 			return super.canMoveTo() && page.townUnlocked(this.name);
 		}
 
-		moveTo() {
+		// Assumes we are already in the correct subregion
+		_moveTo() {
 			page.moveToTown(this.name);
 		}
 	}
@@ -1336,10 +1391,14 @@
 			Setting.returnPosition.set(getPlayerLocation());
 		}
 
-		loc.moveTo();
-		Setting.currentPosition.set(loc);
+		const success = loc.moveTo();
+		const newLoc = getPlayerLocation();
+		Setting.currentPosition.set(newLoc);
 
-		console.log("Moving to", loc.name, ...(reason? ["for", reason] : []));
+		if (success) {
+			console.log("Moving to", loc.name,
+					...(reason? ["for", reason] : []));
+		}
 	}
 
 	function canAffordDungeonRuns(dungeonName, count) {
@@ -1478,10 +1537,16 @@
 		// If we exit the quest loop, there aren't any quest requiring specific locations...
 		const returnPos = Setting.returnPosition.get();
 		if (returnPos != null) {
-			returnPos.moveTo();
-			Setting.returnPosition.set(null);
-			Setting.currentPosition.set(null);
-			console.log("Returning to", returnPos.name);
+			const success = returnPos.moveTo();
+			
+			if (success) {
+				Setting.returnPosition.set(null);
+				Setting.currentPosition.set(null);
+				console.log("Returning to", returnPos.name);
+			} else {
+				Setting.currentPosition.set(getPlayerLocation());
+			}
+
 			return true;
 		}
 	}
