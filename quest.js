@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.0+subregion-movement
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -711,9 +711,7 @@
 		 */
 		subregionToRegion() {
 			const {regionId, subregion} = this._getSubregion(subregionName);
-
-			// TODO: regionId to region name.
-			throw now Error("TODO");
+			return GameConstants.Region[regionId];
 		},
 
 		/**
@@ -760,8 +758,9 @@
 				throw new Error("moveToSubregion cannot move between regions");
 			}
 
-			// TODO: Check you can access that subregion.
-			throw new Error("TODO");
+			if (!subregion.unlocked()) {
+				throw new Error("Cannot access " + subregionName);
+			}
 
 			player.subregion = subregion.id;
 		},
@@ -892,12 +891,13 @@
 		}
 
 		// abstract getSubregion()
-		// abstract moveTo()
+		// abstract _moveTo()
 
 		canMoveTo() {
-			// We aren't (yet) moving between subregions
-			// TODO: But now we are! only check for region
-			return this.getSubregion() == page.getPlayerSubregion();
+			// We aren't (yet) moving between regions
+			const thisSubr = this.getSubregion();
+			const playerSubr = page.getPlayerSubregion();
+			return page.subregionToRegion(thisSubr) == page.subregionToRegion(playerSubr);
 		}
 
 		_moveToSubregion() {
@@ -907,6 +907,17 @@
 			}
 
 			page.moveToSubregion(subr);
+			return true;
+		}
+
+		// True if we reached the location.
+		// False if more steps are needed.
+		moveTo() {
+			if (this._moveToSubregion()) {
+				return false;
+			}
+
+			this._moveTo();
 			return true;
 		}
 
@@ -950,11 +961,8 @@
 			return super.canMoveTo() && page.routeCompleted(this.name);
 		}
 
-		moveTo() {
-			if (this._moveToSubregion()) {
-				return false;
-			}
-
+		// Assumes we are already in the correct subregion
+		_moveTo() {
 			page.moveToRoute(this.name);
 		}
 	}
@@ -972,11 +980,8 @@
 			return super.canMoveTo() && page.townUnlocked(this.name);
 		}
 
-		moveTo() {
-			if (this._moveToSubregion()) {
-				return false;
-			}
-
+		// Assumes we are already in the correct subregion
+		_moveTo() {
 			page.moveToTown(this.name);
 		}
 	}
@@ -1386,10 +1391,14 @@
 			Setting.returnPosition.set(getPlayerLocation());
 		}
 
-		loc.moveTo();
-		Setting.currentPosition.set(loc);
+		const success = loc.moveTo();
+		const newLoc = getPlayerLocation();
+		Setting.currentPosition.set(newLoc);
 
-		console.log("Moving to", loc.name, ...(reason? ["for", reason] : []));
+		if (success) {
+			console.log("Moving to", loc.name,
+					...(reason? ["for", reason] : []));
+		}
 	}
 
 	function canAffordDungeonRuns(dungeonName, count) {
