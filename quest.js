@@ -1543,7 +1543,10 @@
 				Setting.returnPosition.set(null);
 				Setting.currentPosition.set(null);
 				console.log("Returning to", returnPos.name);
+			} else {
+				Setting.currentPosition.set(getPlayerLocation());
 			}
+
 			return true;
 		}
 	}
