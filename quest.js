@@ -1537,10 +1537,13 @@
 		// If we exit the quest loop, there aren't any quest requiring specific locations...
 		const returnPos = Setting.returnPosition.get();
 		if (returnPos != null) {
-			returnPos.moveTo();
-			Setting.returnPosition.set(null);
-			Setting.currentPosition.set(null);
-			console.log("Returning to", returnPos.name);
+			const success = returnPos.moveTo();
+			
+			if (success) {
+				Setting.returnPosition.set(null);
+				Setting.currentPosition.set(null);
+				console.log("Returning to", returnPos.name);
+			}
 			return true;
 		}
 	}
