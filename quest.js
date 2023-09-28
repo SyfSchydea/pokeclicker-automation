@@ -709,7 +709,7 @@
 		 * @param subregionName {string} - Name of the subregion to look up.
 		 * @return              {string} - Name of the region which contains that region.
 		 */
-		subregionToRegion() {
+		subregionToRegion(subregionName) {
 			const {regionId, subregion} = this._getSubregion(subregionName);
 			return GameConstants.Region[regionId];
 		},
