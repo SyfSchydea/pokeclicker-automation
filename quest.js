@@ -1331,7 +1331,7 @@
 				}
 
 				const currentTown = getPlayerLocation();
-				if (currentTown.type != "Town"
+				if (currentTown.type != "town"
 						|| !page.dungeonHasShadowPokemon(currentTown.name)) {
 					return false;
 				}
@@ -1658,7 +1658,7 @@
 				}
 
 				case QuestType.CATCH_SHADOW:
-					if (playerLoc.type != "Town"
+					if (playerLoc.type != "town"
 							|| !page.dungeonHasShadowPokemon(playerLoc.name)) {
 						continue;
 					}
