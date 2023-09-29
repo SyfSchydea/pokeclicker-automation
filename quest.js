@@ -784,7 +784,7 @@
 				throw new Error("Cannot yet access " + regionName);
 			}
 
-			MapHelper.moveToTown(GameConstants.DockTowns[GameConstants.Region[$data]]);
+			MapHelper.moveToTown(GameConstants.DockTowns[regionId]);
 			player.region = regionId;
 			player._subregion(0);
 		},
