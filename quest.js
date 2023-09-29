@@ -15,6 +15,7 @@
 	const QuestType = {
 		BERRY:          "berry",
 		CATCH_POKEMON:  "catch",
+		CATCH_SHADOW:   "shadow",
 		CATCH_SHINIES:  "shiny",
 		CATCH_TYPED:    "catch typed",
 		CLEAR_DUNGEON:  "clear dungeon",
@@ -48,6 +49,7 @@
 	// Enum for pokemon encounter types
 	const EncounterType = {
 		REGULAR: "regular",
+		SHADOW:  "shadow",
 		SHINY:   "shiny",
 
 		Typed: {}, // Populated dynamically
@@ -213,6 +215,10 @@
 					details = {type: QuestType.CATCH_POKEMON};
 					break;
 
+				case CatchShadowsQuest:
+					details = {type: QuestType.CATCH_SHINIES};
+					break;
+
 				case CatchShiniesQuest:
 					details = {type: QuestType.CATCH_SHINIES};
 					break;
@@ -320,6 +326,20 @@
 				],
 				shiny: false,
 				shadow: false,
+				pokerus: GameConstants.Pokerus.Uninfected,
+				caught: true,
+				caughtShiny: true,
+				caughtShadow: true,
+			},
+
+			[EncounterType.SHADOW]: {
+				encounterType: "Dungeon",
+				pokemonType:[
+					PokemonType.None,
+					PokemonType.None,
+				],
+				shiny: false,
+				shadow: true,
 				pokerus: GameConstants.Pokerus.Uninfected,
 				caught: true,
 				caughtShiny: true,
@@ -857,6 +877,38 @@
 		},
 
 		/**
+		 * Check if the given dungeon has
+		 * at least one shadow pokemon encounter in it.
+		 * Shadow pokemon may be assumed to be in trainer battles.
+		 *
+		 * @param dungeonName {string} - Name of dungeon to check.
+		 * @return                     - Truthy if the dungeon has
+		 *                               shadow pokemon.
+		 *                               Falsey if it has no shadow pokemon,
+		 *                               or does not exist.
+		 */
+		dungeonHasShadowPokemon(dungeonName) {
+			const dung = dungeonList[dungeonName];
+			if (!dung) {
+				return false;
+			}
+
+			for (const enemy of [...dung.enemyList, ...dung.bossList]) {
+				if (!(enemy instanceof DungeonTrainer)) {
+					continue;
+				}
+
+				for (const pkmn of enemy.team) {
+					if (pkmn.shadow == GameConstants.ShadowStatus.Shadow) {
+						return true;
+					}
+				}
+			}
+
+			return false;
+		},
+
+		/**
 		 * Check how many dungeon tokens the player has.
 		 *
 		 * @return {number} - Number of dungeon tokens.
@@ -1183,6 +1235,17 @@
 				{ball: "Ultraball", amountRequired: 100},
 				{ball: "Greatball", amountRequired: 100},
 			]),
+
+		FilterType.shadow = new FilterType(EncounterType.SHADOW,
+			"!syfQuest shadow", {
+				shadow: true,
+				caughtShadow: true,
+			},
+			"hasShadowFilter")
+			.setPokeballPreferences([
+				{ball: "Ultraball", amountRequired: 1000},
+				{ball: "Greatball", amountRequired: 1000},
+			]),
 	];
 
 	FilterType.byPokemonType = {};
@@ -1260,6 +1323,29 @@
 			case QuestType.CATCH_POKEMON:
 				return (page.willCatch(EncounterType.REGULAR)
 						|| Setting.modifyPokeballFilters.get());
+
+			case QuestType.CATCH_SHADOW:
+				if (!page.willCatch(EncounterType.SHADOW)
+						&& !Setting.modifyPokeballFilters.get()) {
+					return false;
+				}
+
+				const currentTown = getPlayerLocation();
+				if (currentTown.type != "Town"
+						|| !page.dungeonHasShadowPokemon(currentTown.name)) {
+					return false;
+				}
+
+				if (!canAffordDungeonRuns(currentTown.name,
+							quest.amountRemaining * 5)) {
+					return false;
+				}
+
+				if (!window.syfScripts?.dungeonCrawler?.canClearDungeons?.()) {
+					return false;
+				}
+
+				return true;
 
 			case QuestType.CATCH_SHINIES:
 				return (page.willCatch(EncounterType.SHINY)
@@ -1379,6 +1465,15 @@
 					FilterType.regular.addFilter();
 					return true;
 
+				case QuestType.CATCH_SHADOW:
+					if (page.willCatch(EncounterType.SHADOW)) {
+						FilterType.shadow.isRequired = true;
+						continue;
+					}
+
+					FilterType.shadow.addFilter();
+					return true;
+
 				case QuestType.CATCH_SHINIES:
 					if (page.willCatch(EncounterType.SHINY)) {
 						FilterType.shiny.isRequired = true;
@@ -1468,6 +1563,22 @@
 		return new RouteLocation(bestRoute);
 	}
 
+	function canRunDungeon(dungeon, amount=1) {
+		return (page.dungeonCompleted(dungeon)
+			&& window.syfScripts?.dungeonCrawler?.canClearDungeons?.()
+			&& canAffordDungeonRuns(dungeon, amount));
+	}
+
+	function runDungeon(amount=1) {
+		if (window.syfScripts.dungeonCrawler.busy()) {
+			return false;
+		}
+
+		window.syfScripts.dungeonCrawler.clearDungeon(
+				quest.amountRemaining);
+		return true;
+	}
+
 	function updateActiveMovement() {
 		if (!canMove()) {
 			return false;
@@ -1546,22 +1657,26 @@
 					continue;
 				}
 
+				case QuestType.CATCH_SHADOW:
+					if (playerLoc.type != "Town"
+							|| !page.dungeonHasShadowPokemon(playerLoc.name)) {
+						continue;
+					}
+
+					if (!canRunDungeon(playerLoc.name, quest.amountRemaining)) {
+						continue;
+					}
+
+					return runDungeon(quest.amountRemaining);
+
 				case QuestType.CLEAR_DUNGEON: {
-					if (!page.dungeonCompleted(quest.dungeon)
-							|| !window.syfScripts?.dungeonCrawler?.canClearDungeons?.()
-							|| !canAffordDungeonRuns(quest.dungeon, quest.amountRemaining)){
+					if (!canRunDungeon(quest.dungeon, quest.amountRemaining){
 						continue;
 					}
 
 					const dungeonTown = new TownLocation(quest.dungeon);
 					if (dungeonTown.equals(playerLoc)) {
-						if (window.syfScripts.dungeonCrawler.busy()) {
-							return false;
-						}
-
-						window.syfScripts.dungeonCrawler.clearDungeon(
-								quest.amountRemaining);
-						return true;
+						return runDungeon(quest.amountRemaining);
 					}
 
 					if (dungeonTown.canMoveTo()) {
