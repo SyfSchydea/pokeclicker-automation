@@ -771,7 +771,22 @@
 		 * @param regionName {string} - Name of the region to move to.
 		 */
 		moveToRegion(regionName) {
-			throw new Error("TODO: Implement me");
+			if (player.highestRegion() == GameConstants.Region.kanto) {
+				throw new Error("Cannot change regions before unlocking Johto");
+			}
+
+			if (!TownList[GameConstants.DockTowns[player.region]].isUnlocked()) {
+				throw new Error("Cannot leave current region before unlocking the dock");
+			}
+
+			const regionId = GameConstants.Region[regionName];
+			if (regionId > player.highestRegion) {
+				throw new Error("Cannot yet access " + regionName);
+			}
+
+			MapHelper.moveToTown(GameConstants.DockTowns[GameConstants.Region[$data]]);
+			player.region = regionId;
+			player._subregion(0);
 		},
 
 		/**
@@ -903,20 +918,32 @@
 		// abstract _moveTo()
 
 		canMoveTo() {
-			// We aren't (yet) moving between regions
-			const thisSubr = this.getSubregion();
-			const playerSubr = page.getPlayerSubregion();
-			return page.subregionToRegion(thisSubr) == page.subregionToRegion(playerSubr);
+			return true;
 		}
 
+		/**
+		 * Move to the region or subregion of this location.
+		 * Returns true if movement was made towards the subregion,
+		 * Or false if the player is already in the correct subregion.
+		 */
 		_moveToSubregion() {
 			const subr = this.getSubregion();
-			if (subr == page.getPlayerSubregion()) {
-				return false;
+			const region = page.subregionToRegion(subr);
+
+			const playerSubr = page.getPlayerSubregion();
+			const playerRegion = page.subregionToRegion(playerSubr);
+
+			if (region != playerRegion) {
+				page.moveToRegion(region);
+				return true;
 			}
 
-			page.moveToSubregion(subr);
-			return true;
+			if (subr != playerSubr) {
+				page.moveToSubregion(subr);
+				return true;
+			}
+
+			return false;
 		}
 
 		// True if we reached the location.
