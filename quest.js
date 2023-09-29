@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.1.1
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -1423,6 +1423,10 @@
 				bestRoute = route;
 				bestFrequency = freq;
 			}
+		}
+
+		if (bestRoute == null) {
+			return null;
 		}
 
 		return new RouteLocation(bestRoute);
