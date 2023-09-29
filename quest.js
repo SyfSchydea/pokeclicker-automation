@@ -216,7 +216,7 @@
 					break;
 
 				case CatchShadowsQuest:
-					details = {type: QuestType.CATCH_SHINIES};
+					details = {type: QuestType.CATCH_SHADOW};
 					break;
 
 				case CatchShiniesQuest:
