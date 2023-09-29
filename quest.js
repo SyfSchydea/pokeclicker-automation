@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.1+region-movement
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -763,6 +763,15 @@
 			}
 
 			player.subregion = subregion.id;
+		},
+
+		/**
+		 * Move to the specified region.
+		 *
+		 * @param regionName {string} - Name of the region to move to.
+		 */
+		moveToRegion(regionName) {
+			throw new Error("TODO: Implement me");
 		},
 
 		/**
