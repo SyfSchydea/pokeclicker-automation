@@ -1670,7 +1670,7 @@
 					return runDungeon(quest.amountRemaining);
 
 				case QuestType.CLEAR_DUNGEON: {
-					if (!canRunDungeon(quest.dungeon, quest.amountRemaining){
+					if (!canRunDungeon(quest.dungeon, quest.amountRemaining)) {
 						continue;
 					}
 
