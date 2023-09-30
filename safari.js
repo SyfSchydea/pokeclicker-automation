@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Safari Ranger
 // @namespace    http://tampermonkey.net/
-// @version      1.5.3
+// @version      1.5.3+rocks
 // @description  This script will automate the safari zone.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -336,6 +336,58 @@
 	const DELAY_WALK       =  250;
 	const DELAY_BATTLE     = 1500;
 
+	const SETTINGS_SCOPE_SAVE = {
+		storage: localStorage,
+		getKey: () => "syfschydea--farm--settings--" + page.getSaveKey(),
+	};
+	const SETTINGS_SCOPE_SESSION = {
+		storage: sessionStorage,
+		getKey: () => "syfschydea--farm--settings",
+	};
+
+	/**
+	 * Holds info about a single value which exists in settings.
+	 */
+	class Setting {
+		// readFn may be passed to process the raw value when reading
+		constructor(scope, key, defaultVal, readFn=x=>x) {
+			this.scope = scope;
+			this.key = key;
+			this.defaultVal = defaultVal;
+			this.readFn = readFn;
+		}
+
+		_read() {
+			const settingsJson = this.scope.storage.getItem(
+					this.scope.getKey());
+
+			if (!settingsJson) {
+				return {};
+			}
+
+			return JSON.parse(settingsJson);
+		}
+
+		get() {
+			const settings = this._read();
+
+			if (!(this.key in settings)) {
+				return this.defaultVal;
+			}
+
+			return this.readFn(settings[this.key]);
+		}
+
+		set(val) {
+			const settings = this._read();
+			settings[this.key] = val;
+			this.scope.storage.setItem(this.scope.getKey(),
+					JSON.stringify(settings));
+		}
+	}
+
+	Setting.useRocks = new Setting(SETTINGS_SCOPE_SAVE, "useRocks", true);
+
 	const DIRECTIONS = {
 		"up":    {x:  0, y: -1},
 		"down":  {x:  0, y:  1},
@@ -665,7 +717,8 @@
 
 		hasExpired() {
 			return (!page.isOnSafari()
-					|| page.getLevel() >= this.targetLevel)
+					|| page.getLevel() >= this.targetLevel
+					|| !Setting.useRocks.get())
 		}
 
 		action() {
@@ -714,7 +767,7 @@
 				} else if (page.getEnemyAngryCatchRate() < 0.7) {
 					// Only attempt to catch pokemon which have a decent chance of catching.
 					page.runFromBattle();
-				} else if (!page.enemyAngered()) {
+				} else if (!page.enemyAngered() && Setting.useRocks.get()) {
 					// Throw rocks at enemies to anger them before using the balls on them.
 					page.throwRock();
 				} else {
@@ -774,8 +827,12 @@
 
 	function cmdGrindLevel(targetLevel) {
 		if (typeof targetLevel != "number" || targetLevel <= 0) {
-			console.error("targetLevel must be a positive number");
-			return;
+			throw new Error("targetLevel must be a positive number");
+		}
+
+		if (!Setting.useRocks.get()) {
+			throw new Error("Can't grind levels without using rocks.\n"
+				+ `Call ${WINDOW_KEY}.useRocks(true) to enable rocks.`);
 		}
 
 		startTask(new GrindLevelTask(targetLevel));
@@ -789,12 +846,26 @@
 		currentTask = null;
 	}
 
+	/**
+	 * User-facing command.
+	 * Set whether the script should use rocks and normal bait
+	 * on pokemon in the safari zone.
+	 * On ACSRQ saves, this should be set to false.
+	 */
+	function cmdUseRocks(value=true) {
+		Setting.useRocks.set(!!value);
+
+		console.log((value? "Started" : "Stopped"),
+				"using rocks and normal bait");
+	}
+
 	(function main() {
 		window[WINDOW_KEY] = {
 			findShiny:  cmdFindShiny,
 			stop:       cmdStop,
 			grindLevel: cmdGrindLevel,
 			items:      cmdItems,
+			useRocks:   cmdUseRocks,
 		};
 	})();
 })();
