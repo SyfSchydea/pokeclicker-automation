@@ -1331,7 +1331,7 @@
 				}
 
 				const currentTown = getPlayerLocation();
-				if (currentTown.type != "town"
+				if (currentTown == null || currentTown.type != "town"
 						|| !page.dungeonHasShadowPokemon(currentTown.name)) {
 					return false;
 				}
@@ -1574,8 +1574,7 @@
 			return false;
 		}
 
-		window.syfScripts.dungeonCrawler.clearDungeon(
-				quest.amountRemaining);
+		window.syfScripts.dungeonCrawler.clearDungeon(amount);
 		return true;
 	}
 
