@@ -1853,6 +1853,21 @@
 		return count;
 	}
 
+	/**
+	 * Count the number of empty plots in the specified plots.
+	 */
+	function countEmpty(plots=allPlots) {
+		let count = 0;
+
+		for (const i of plots) {
+			if (page.plotIsEmpty(i)) {
+				count += 1;
+			}
+		}
+
+		return count;
+	}
+
 	class GenericTask {
 		constructor(priority, expirationPolicy, actionPolicy) {
 			this.priority = priority;
@@ -2012,13 +2027,14 @@
 
 		// Find the youngest berry, ignoring any excess
 		const berryCount = countBerries(berryType, plots);
+		const emptyPlots = countEmpty(plots);
 
 		let youngestAge;
-		if (berryCount < amount) {
+		if (berryCount < amount && emptyPlots > 0) {
 			youngestAge = 0;
 
 		} else {
-			const excessBerries = berryCount - amount;
+			const excessBerries = Math.max(0, berryCount - amount);
 			const youngestIdx = findNthYoungestBerry(berryType, excessBerries, plots);
 			if (youngestIdx == null) {
 				return false;
