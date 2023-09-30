@@ -862,7 +862,7 @@
 		 * }} - Object containing the names of the target and parent
 		 *      berries. Null if there are no suitable mutations.
 		 */
-		const getEligibleTwoBerryMutation() {
+		getEligibleTwoBerryMutation() {
 			const farming = this._getFarmingModule();
 			if (!farming) {
 				return null;
