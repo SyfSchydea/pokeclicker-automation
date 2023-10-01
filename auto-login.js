@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Login
 // @namespace    http://tampermonkey.net/
-// @version      1.7
+// @version      1.7.1
 // @description  Automatically re-logs in, if you refresh
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -503,7 +503,9 @@
 		const settings = JSON.parse(settingsJson);
 
 		if (page.hasShiny(settings.targetPkmn)) {
-			console.log("Got a shiny", settings.targetPkmn);
+			console.log("Got a shiny", settings.targetPkmn,
+					"after", settings.attempts,
+					(settings.attempts == 1? "attempt!" : "attempts!"));
 			sessionStorage.removeItem(SSKEY_EVO_STONE_SETTINGS);
 			return;
 		}
@@ -516,6 +518,11 @@
 
 		// Use the stone on the pokemon
 		page.useEvolutionStone(settings.basePkmn, settings.stone);
+
+		settings.attempts += 1;
+		sessionStorage.setItem(SSKEY_EVO_STONE_SETTINGS,
+				JSON.stringify(settings));
+
 		return setTimeout(evoStoneTick, DELAY_BUY);
 	}
 
@@ -554,6 +561,8 @@
 			basePkmn:   basePkmnName,
 			targetPkmn: resultingPkmn,
 			stone:      stoneName,
+
+			attempts:   0,
 		});
 		sessionStorage.setItem(SSKEY_EVO_STONE_SETTINGS, settings);
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.42
+// @version      1.43
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -853,6 +853,54 @@
 		},
 
 		/**
+		 * Find a mutation which requires 4 of each of two parent berries around an empty plot.
+		 * This is targeting the Babiri mutation.
+		 *
+		 * @return {{
+		 *   targetBerry: string,
+		 *   parentBerries: string[],
+		 * }} - Object containing the names of the target and parent
+		 *      berries. Null if there are no suitable mutations.
+		 */
+		getEligibleTwoBerryMutation() {
+			const farming = this._getFarmingModule();
+			if (!farming) {
+				return null;
+			}
+
+			const mutation = farming.mutations.find(m => {
+					// Filter for mutations of the right type...
+					if (!(m instanceof GrowNearBerryStrictMutation)) {
+						return false;
+					}
+
+					// And which require 8 of one berry type...
+					const parents = Object.entries(m.berryReqs);
+					return parents.length == 2
+						&& parents[0][1] == 4
+						&& parents[1][1] == 4
+
+						// And which we haven't already done...
+						&& farming.berryList[m.mutatedBerry]() == 0
+						&& !this._isBerryIdOnField(m.mutatedBerry)
+
+						// And which we have enough of the parent berries
+						&& farming.berryList[+parents[0][0]]() > 14
+						&& farming.berryList[+parents[1][0]]() > 14;
+				});
+
+			if (!mutation) {
+				return null;
+			}
+
+			return {
+				targetBerry: this._lookupBerry(mutation.mutatedBerry),
+				parentBerries: Object.keys(mutation.berryReqs)
+						.map(b => this._lookupBerry(b)),
+			};
+		},
+
+		/**
 		 * Find a berry which may be usefully mutated
 		 * by several of another berry anywhere in the field,
 		 * but are specified by their flavours.
@@ -1203,6 +1251,18 @@
 		0, 0, 0, 0, 0,
 		0, 0, 0, 0, 0,
 		0, 1, 0, 0, 1,
+	]);
+
+	/**
+	 * Layout for surrounding an empty plot with
+	 * four of one berry and four of another.
+	 */
+	const FOUR_AND_FOUR_LAYOUT = convertMutationLayout([
+		0,  1,  0,  1,  0,
+		1, -1,  1, -1,  1,
+		0,  1,  0,  1,  0,
+		1, -1,  1, -1,  1,
+		0,  1,  0,  1,  0,
 	]);
 
 	/**
@@ -1793,6 +1853,21 @@
 		return count;
 	}
 
+	/**
+	 * Count the number of empty plots in the specified plots.
+	 */
+	function countEmpty(plots=allPlots) {
+		let count = 0;
+
+		for (const i of plots) {
+			if (page.plotIsEmpty(i)) {
+				count += 1;
+			}
+		}
+
+		return count;
+	}
+
 	class GenericTask {
 		constructor(priority, expirationPolicy, actionPolicy) {
 			this.priority = priority;
@@ -1952,13 +2027,14 @@
 
 		// Find the youngest berry, ignoring any excess
 		const berryCount = countBerries(berryType, plots);
+		const emptyPlots = countEmpty(plots);
 
 		let youngestAge;
-		if (berryCount < amount) {
+		if (berryCount < amount && emptyPlots > 0) {
 			youngestAge = 0;
 
 		} else {
-			const excessBerries = berryCount - amount;
+			const excessBerries = Math.max(0, berryCount - amount);
 			const youngestIdx = findNthYoungestBerry(berryType, excessBerries, plots);
 			if (youngestIdx == null) {
 				return false;
@@ -2014,6 +2090,38 @@
 		}
 	}
 
+	class FourAndFourAction {
+		constructor(berries) {
+			if (page.getBerryMaturityAge(berries[0]) > page.getBerryMaturityAge(berries[1])) {
+				this.berries = berries;
+			} else {
+				this.berries = [berries[1], berries[0]];
+			}
+		}
+
+		performAction() {
+			const layout = FOUR_AND_FOUR_LAYOUT;
+
+			if (harvestOne({exceptBerries: this.berries}) != null) {
+				return DELAY_HARVEST;
+			}
+
+			if (harvestRedundantBerries(this.berries[0],
+						{plots: layout[0]})
+					|| harvestRedundantBerries(this.berries[1],
+						{plots: layout[1]})) {
+				return DELAY_HARVEST;
+			}
+
+			if (plantOne(this.berries[0], layout[0]) != null
+					|| plantOne(this.berries[1], layout[1]) != null) {
+				return DELAY_PLANT;
+			}
+
+			return DELAY_IDLE;
+		}
+	}
+
 	function makePlotUnlockTask(plotIdx) {
 		return new GenericTask(PRIORITY_PLOT_UNLOCK,
 				new PlotUnlockExpiration(plotIdx),
@@ -2030,6 +2138,12 @@
 		return new GenericTask(PRIORITY_MUTATION,
 				new BerryUnlockExpiration(targetBerry),
 				new FieldBerryCountAction(parentBerry, amount));
+	}
+
+	function makeFourAndFourMutationTask(targetBerry, parentBerries) {
+		return new GenericTask(PRIORITY_MUTATION,
+				new BerryUnlockExpiration(targetBerry),
+				new FourAndFourAction(parentBerries));
 	}
 
 	/**
@@ -2630,6 +2744,19 @@
 					fieldMutation.targetBerry,
 					fieldMutation.parentBerry,
 					fieldMutation.amount);
+				priority = currentTask.priority;
+				break mutationTasks;
+			}
+
+			const fourAndFourMutation = page.getEligibleTwoBerryMutation();
+			if (fourAndFourMutation) {
+				console.log("Farming to grow",
+					fourAndFourMutation.parentBerries[0], "and",
+					fourAndFourMutation.parentBerries[1], "into",
+					fourAndFourMutation.targetBerry);
+				currentTask = makeFourAndFourMutationTask(
+					fourAndFourMutation.targetBerry,
+					fourAndFourMutation.parentBerries);
 				priority = currentTask.priority;
 				break mutationTasks;
 			}
