@@ -319,6 +319,15 @@
 		enemyAngered() {
 			return SafariBattle.enemy.angry > 0;
 		},
+
+		/**
+		 * Fetch the save key of the currently loaded save.
+		 *
+		 * @return {string} - Save key if currently logged in, or an empty string if not.
+		 */
+		getSaveKey() {
+			return Save.key;
+		},
 	};
 
 	//////////////////////////
