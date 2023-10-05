@@ -257,7 +257,7 @@
 
 			// Note that standard bait returns a string containing an infinity symbol as its amount
 			const amount = bait.amount;
-			if (typeof amount != "number")
+			if (typeof amount != "number") {
 				return Infinity;
 			}
 
