@@ -917,11 +917,6 @@
 			throw new Error("targetLevel must be a positive number");
 		}
 
-		if (!Setting.useRocks.get()) {
-			throw new Error("Can't grind levels without using rocks.\n"
-				+ `Call ${WINDOW_KEY}.useRocks(true) to enable rocks.`);
-		}
-
 		startTask(new GrindLevelTask(targetLevel));
 	}
 
