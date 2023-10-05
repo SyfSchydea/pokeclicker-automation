@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Safari Ranger
 // @namespace    http://tampermonkey.net/
-// @version      1.6
+// @version      1.6+bait-grind
 // @description  This script will automate the safari zone.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -216,6 +216,52 @@
 		 */
 		throwRock() {
 			this.isOnSafari() && this.inBattle() && !SafariBattle.busy() && SafariBattle.throwRock();
+		},
+
+		/**
+		 * Throw the specified type of bait at the current enemy pokemon.
+		 *
+		 * @param baitType {string} - Type of bait. "Bait", "Razz", or "Nanab".
+		 */
+		throwBait(baitType) {
+			const bait = BaitList[baitType];
+			if (!bait) {
+				throw new Error(`'${baitType}' is not a valid bait.`);
+			}
+
+			if (!this.isOnSafari() || !this.inBattle() || SafariBattle.busy()) {
+				return;
+			}
+
+			// Check we have enough
+			// Note that standard bait returns a string containing an infinity symbol as its amount
+			const amount = bait.amount;
+			if (typeof amount == "number" && amount <= 0) {
+				throw new Error("You don't have enough " + baitType);
+			}
+
+			SafariBattle.selectedBait(bait);
+			SafariBattle.throwBait();
+		},
+
+		/**
+		 * Check how many of the given bait the player has.
+		 *
+		 * @param baitType {string} - Type of bait. "Bait", "Razz", or "Nanab".
+		 */
+		getBaitAmount(baitType) {
+			const bait = BaitList[baitType];
+			if (!bait) {
+				throw new Error(`'${baitType}' is not a valid bait.`);
+			}
+
+			// Note that standard bait returns a string containing an infinity symbol as its amount
+			const amount = bait.amount;
+			if (typeof amount != "number") {
+				return Infinity;
+			}
+
+			return amount;
 		},
 
 		/**
@@ -708,6 +754,31 @@
 		}
 	}
 
+	/**
+	 * Throw a bait for the sake of getting the xp.
+	 * Returns true on success, false if a suitable bait is not found.
+	 */
+	function throwWasteBait() {
+		const RESERVE_AMOUNT = 100;
+
+		if (Setting.useRocks.get()) {
+			page.throwBait("Bait");
+			return true;
+		}
+
+		if (page.getBaitAmount("Razz") > RESERVE_AMOUNT) {
+			page.throwBait("Razz");
+			return true;
+		}
+
+		if (page.getBaitAmount("Nanab") > RESERVE_AMOUNT) {
+			page.throwBait("Nanab");
+			return true;
+		}
+
+		return false;
+	}
+
 	// Throw rocks until a given level
 	class GrindLevelTask {
 		constructor(targetLevel) {
@@ -718,6 +789,8 @@
 			}
 
 			this.targetLevel = targetLevel;
+
+			this.success = true;
 		}
 
 		describe() {
@@ -727,7 +800,7 @@
 		hasExpired() {
 			return (!page.isOnSafari()
 					|| page.getLevel() >= this.targetLevel
-					|| !Setting.useRocks.get())
+					|| !this.success)
 		}
 
 		action() {
@@ -736,7 +809,12 @@
 					return DELAY_BATTLE;
 				}
 
-				page.throwRock();
+				if (Setting.useRocks.get()) {
+					page.throwRock();
+				} else {
+					this.success = throwWasteBait();
+				}
+
 				return DELAY_BATTLE;
 			}
 
@@ -837,11 +915,6 @@
 	function cmdGrindLevel(targetLevel) {
 		if (typeof targetLevel != "number" || targetLevel <= 0) {
 			throw new Error("targetLevel must be a positive number");
-		}
-
-		if (!Setting.useRocks.get()) {
-			throw new Error("Can't grind levels without using rocks.\n"
-				+ `Call ${WINDOW_KEY}.useRocks(true) to enable rocks.`);
 		}
 
 		startTask(new GrindLevelTask(targetLevel));
