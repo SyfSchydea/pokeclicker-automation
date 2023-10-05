@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Safari Ranger
 // @namespace    http://tampermonkey.net/
-// @version      1.6+bait-grind
+// @version      1.7
 // @description  This script will automate the safari zone.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
