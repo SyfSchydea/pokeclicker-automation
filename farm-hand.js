@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.43
+// @version      1.43+farm-liechi
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -378,7 +378,7 @@
 			const SPECIAL_BERRIES = [BerryType.Kasib, BerryType.Kebia];
 
 			const farming = App.game.farming;
-			const harvestAmountRequirement = !excludeSpecial && this.getBerryAmount("Passho") >= 25? 1 : 2;
+			const harvestAmountRequirement = !excludeSpecial && this.getBerryAmount("Passho") >= 25? 0.5 : 2;
 
 			let validBerries = farming.berryData
 				// Only take berries which yield more from harvesting (eg. Lum does not)
