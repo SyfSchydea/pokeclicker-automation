@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.44
+// @version      1.44+starf-mutations
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -1265,6 +1265,20 @@
 		0,  1,  0,  1,  0,
 	]);
 
+	/*
+	 * Layout for getting a Starf mutation.
+	 *  0 - Lum
+	 *  1 - All Roseli
+	 *  2 - All-but-one Roseli
+	 */
+	const STARF_LAYOUT_LUM = convertMutationLayout([
+		2, 2, 1, 2, 2,
+		2, 0, 1, 0, 2,
+		1, 1, 1, 1, 1,
+		2, 0, 1, 0, 2,
+		2, 2, 1, 2, 2,
+	]);
+
 	/**
 	 * List of grow mutations which we attempt but don't
 	 * try to deduce them from the code.
@@ -2122,6 +2136,28 @@
 		}
 	}
 
+	class StarfMutationAction {
+		performAction() {
+			const layout = STARF_LAYOUT;
+
+			if (plantOne("Roseli", layout[1]) != null
+					|| plantOne("Lum", layout[0] != null)) {
+				return DELAY_PLANT;
+			}
+
+			if (harvestOne({exceptBerries: ["Roseli", "Lum"]}) != null) {
+				return DELAY_HARVEST;
+			}
+
+			if (countEmpty(layout[2]) > 1
+					&& plantOne("Roseli", layout[2]) != null) {
+				return DELAY_PLANT;
+			}
+
+			return DELAY_IDLE;
+		}
+	}
+
 	function makePlotUnlockTask(plotIdx) {
 		return new GenericTask(PRIORITY_PLOT_UNLOCK,
 				new PlotUnlockExpiration(plotIdx),
@@ -2758,6 +2794,14 @@
 					fourAndFourMutation.targetBerry,
 					fourAndFourMutation.parentBerries);
 				priority = currentTask.priority;
+				break mutationTasks;
+			}
+
+			if (!hasBerry("Starf") && page.getBerryAmount("Roseli") >= 23) {
+				console.log("Farming for a Starf");
+				currentTask = new GenericTask(priority = PRIORITY_MUTATION,
+					new BerryUnlockExpiration("Starf"),
+					new StarfMutationAction());
 				break mutationTasks;
 			}
 		}
