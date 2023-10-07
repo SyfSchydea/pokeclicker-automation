@@ -2138,7 +2138,7 @@
 
 	class StarfMutationAction {
 		performAction() {
-			const layout = STARF_LAYOUT;
+			const layout = STARF_LAYOUT_LUM;
 
 			if (plantOne("Roseli", layout[1]) != null
 					|| plantOne("Lum", layout[0] != null)) {
@@ -2149,7 +2149,7 @@
 				return DELAY_HARVEST;
 			}
 
-			if (countEmpty(layout[2]) > 1
+			if (countEmpty() > 1
 					&& plantOne("Roseli", layout[2]) != null) {
 				return DELAY_PLANT;
 			}
