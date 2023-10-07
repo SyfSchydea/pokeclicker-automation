@@ -2141,7 +2141,7 @@
 			const layout = STARF_LAYOUT_LUM;
 
 			if (plantOne("Roseli", layout[1]) != null
-					|| plantOne("Lum", layout[0] != null)) {
+					|| plantOne("Lum", layout[0]) != null) {
 				return DELAY_PLANT;
 			}
 
