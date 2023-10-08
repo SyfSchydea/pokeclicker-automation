@@ -1549,7 +1549,7 @@
 								+ page.getBerryMaturityAge("Passho"));
 
 						for (const i of SURROUND_LAYOUT[0]) {
-							if (plotIsEmpty(i)) {
+							if (page.plotIsEmpty(i)) {
 								continue;
 							}
 
