@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.45
+// @version      1.45.1
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -2980,7 +2980,7 @@
 		}
 
 		// Most berries can be farmed normally if they have a harvest amount above 1
-		const harvestAmount = page.getBerryAmount(berryName);
+		const harvestAmount = page.getBerryHarvestAmount(berryName);
 		if (harvestAmount >= 2) {
 			return true;
 		}
