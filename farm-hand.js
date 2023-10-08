@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.45.1
+// @version      1.45.1+wacan-low-harvamt
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -1540,16 +1540,49 @@
 					const usePassho = page.getBerryHarvestAmount(trueTargetBerry) <= 1;
 
 					if (usePassho) {
+						const passhoSpots = new Set();
+						const wacanSpots = new Set(SURROUND_LAYOUT[1]);
+
+						// Plant Wacans if there's time for the Wacan to grow
+						// and then a Passho to mature.
+						const thresholdAge = (page.getBerryMaturityAge("Wacan")
+								+ page.getBerryMaturityAge("Passho"));
+
+						for (const i of SURROUND_LAYOUT[0]) {
+							if (plotIsEmpty(i)) {
+								continue;
+							}
+
+							const berry = page.getBerryInPlot(i);
+							if (page.getBerryHarvestAmount(berry) > 1) {
+								continue;
+							}
+
+							const timeToMaturity = (page.getBerryMaturityAge(berry)
+									- page.getPlotAge(i));
+							if (timeToMaturity <= thresholdAge) {
+								for (const j of adjacentPlots(i)) {
+									wacanSpots.delete(j) && passhoSpots.add(j);
+								}
+							}
+						}
+
 						plantingPhases.push({
 							berry: "Passho",
-							plots: SURROUND_LAYOUT[1],
+							plots: passhoSpots,
+						}, {
+							berry: "Wacan",
+							plots: wacanSpots,
 						}, {
 							berry: targetBerry,
 							plots: SURROUND_LAYOUT[0],
 						});
 						harvestingPhases.push({
 							exceptBerries: ["Passho"],
-							plots: SURROUND_LAYOUT[1],
+							plots: passhoSpots,
+						}, {
+							exceptBerries: ["Wacan"],
+							plots: wacanSpots,
 						}, {
 							exceptBerries: [targetBerry, trueTargetBerry],
 							plots: SURROUND_LAYOUT[0],
