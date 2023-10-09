@@ -746,7 +746,7 @@
 	}
 
 	function hasSpreaderInHatchery() {
-		let slotsRemaining = 4;
+		let slotsRemaining = 3;
 
 		for (let slot = page.queueLength() - 1; slot >= 0; slot -= 1) {
 			const pkmn = page.getQueueSlotDexId(slot);
