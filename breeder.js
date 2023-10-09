@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PokéClicker - Auto-breeder
 // @namespace    http://tampermonkey.net/
-// @version      1.26.1
+// @version      1.26.1+breed-pokerus
 // @description  Handles breeding eggs automatically
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -155,6 +155,17 @@
 		 */
 		getSlotDexId(slotIdx) {
 			return App.game.breeding.eggList[slotIdx]().pokemon;
+		},
+
+		/**
+		 * Fetch the dex ID of the pokemon in the given queue slot.
+		 * Undefined behaviour if called on an empty slot.
+		 *
+		 * @param slotIdx {number} - Index of the slot to check.
+		 * @return        {number} - Pokedex id of the pokemon in this slot.
+		 */
+		getQueueSlotDexId(slotIdx) {
+			return App.game.breeding.queueList()[slotIdx];
 		},
 
 		/**
@@ -502,6 +513,30 @@
 		},
 
 		/**
+		 * Check if the given pokemon is able to spread the pokerus.
+		 *
+		 * @param dexId {number} - Pokedex if of the species to look up.
+		 * @return               - Truthy if the pokemon is contagious,
+		 *                         falsey if not.
+		 */
+		pokemonIsContagious(dexId) {
+			const pkmn = App.game.party.getPokemon(dexId);
+			return pkmn.pokerus >= GameConstants.Pokerus.Contagious;
+		},
+
+		/**
+		 * Check if the given pokemon has yet to contract the pokerus.
+		 *
+		 * @param dexId {number} - Pokedex if of the species to look up.
+		 * @return               - Truthy if the pokemon can catch pokerus,
+		 *                         falsey if not.
+		 */
+		pokemonIsUninfected(dexId) {
+			const pkmn = App.game.party.getPokemon(dexId);
+			return pkmn.pokerus <= GameConstants.Pokerus.Uninfected;
+		},
+
+		/**
 		 * Find Pokémon types preferred by current active quests.
 		 *
 		 * @return {string[]} - List of types preferred by Pokémon type quests.
@@ -691,6 +726,57 @@
 		return str[0].toUpperCase() + str.slice(1).toLowerCase();
 	}
 
+	function canSpreadPokerus() {
+		let hasContagious = false;
+		let hasUninfected = false;
+
+		for (const id of shuffle(page.getCaughtPokemon())) {
+			if (page.pokemonIsContagious(id)) {
+				hasContagious = true;
+			} else if (page.pokemonIsUninfected(id)) {
+				hasUninfected = true;
+			}
+
+			if (hasContagious && hasUninfected) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	function hasSpreaderInHatchery() {
+		let slotsRemaining = 4;
+
+		for (let slot = page.queueLength() - 1; slot >= 0; slot -= 1) {
+			const pkmn = page.getQueueSlotDexId(slot);
+			if (page.pokemonIsContagious(pkmn)) {
+				return true;
+			}
+
+			if (--slotsRemaining <= 0) {
+				return false;
+			}
+		}
+
+		for (let slot = 3; slot >= 0; slot -= 1) {
+			if (page.slotIsEmpty(slot)) {
+				continue;
+			}
+
+			const pkmn = page.getSlotDexId(slot);
+			if (page.pokemonIsContagious(pkmn)) {
+				return true;
+			}
+
+			if (--slotsRemaining <= 0) {
+				return false;
+			}
+		}
+
+		return false;
+	}
+
 	/**
 	 * Choose a pokemon to be bred.
 	 *
@@ -702,7 +788,8 @@
 	 * @return               {number} - Pokedex id of the chosen pokemon.
 	 */
 	function getBreedableMon(preferredTypes=[]) {
-		const WEIGHT_PREFERRED_TYPE = 4;
+		const WEIGHT_PREFERRED_TYPE = 8;
+		const WEIGHT_POKERUS        = 4;
 		const WEIGHT_NOT_SHINY      = 2;
 		const WEIGHT_CURRENT_REGION = 1;
 
@@ -713,9 +800,13 @@
 
 		const shinyBreeding = Setting.shinyBreeding.get();
 
+		const breedPokerus = canSpreadPokerus();
+		const needSpreader = breedPokerus && !hasSpreaderInHatchery();
+
 		const maxScore = preferredTypes.length * WEIGHT_PREFERRED_TYPE
 				+ (shinyBreeding? WEIGHT_CURRENT_REGION : 0)
-				+ WEIGHT_NOT_SHINY;
+				+ WEIGHT_NOT_SHINY
+				+ (breedPokerus? WEIGHT_POKERUS : 0);
 
 		let bestMon = null;
 		let bestScore = -1;
@@ -743,6 +834,12 @@
 
 			if (page.pokemonIsFromHighestRegion(id) || page.pokemonIsFromCurrentRegion(id)) {
 				score += WEIGHT_CURRENT_REGION;
+			}
+
+			if (breedPokerus && (
+					(needSpreader && page.pokemonIsContagious(id))
+					|| (!needSpreader && page.pokemonIsUninfected(id)))) {
+				score += WEIGHT_POKERUS;
 			}
 
 			if (bestMon == null || score > bestScore) {
