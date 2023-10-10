@@ -822,7 +822,7 @@
 			}
 		}
 
-		const maxScore = preferredTypes.length * WEIGHT_PREFERRED_TYPE
+		const maxScore = Math.min(2, preferredTypes.size) * WEIGHT_PREFERRED_TYPE
 				+ (shinyBreeding? WEIGHT_CURRENT_REGION : 0)
 				+ WEIGHT_NOT_SHINY
 				+ (breedPokerus? WEIGHT_POKERUS : 0);
