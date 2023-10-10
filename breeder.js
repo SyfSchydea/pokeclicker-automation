@@ -774,7 +774,7 @@
 	function currentSpreaderTypes() {
 		const types = new Set();
 
-		for (const pkmn in pokemonInTopSlots(3)) {
+		for (const pkmn of pokemonInTopSlots(3)) {
 			if (page.pokemonIsContagious(pkmn)) {
 				for (const t of page.getPokemonType(pkmn)) {
 					types.add(t);
@@ -814,8 +814,8 @@
 		let needSpreader = false;
 		if (breedPokerus) {
 			const spreaderTypes = currentSpreaderTypes();
+			needSpreader = spreaderTypes == null;
 			if (spreaderTypes != null) {
-				needSpreader = true;
 				for (const t of spreaderTypes) {
 					preferredTypes.add(t);
 				}
