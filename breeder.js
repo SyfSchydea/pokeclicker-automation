@@ -796,10 +796,10 @@
 	 * @return               {number} - Pokedex id of the chosen pokemon.
 	 */
 	function getBreedableMon(preferredTypes=[]) {
-		const WEIGHT_PREFERRED_TYPE = 8;
-		const WEIGHT_POKERUS        = 4;
-		const WEIGHT_NOT_SHINY      = 2;
-		const WEIGHT_CURRENT_REGION = 1;
+		const WEIGHT_POKERUS        = 12;
+		const WEIGHT_PREFERRED_TYPE =  4;
+		const WEIGHT_NOT_SHINY      =  2;
+		const WEIGHT_CURRENT_REGION =  1;
 
 		const parentMonId = page.getBabyParent();
 		if (parentMonId != null) {
