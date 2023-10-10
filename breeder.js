@@ -745,17 +745,16 @@
 		return false;
 	}
 
-	function hasSpreaderInHatchery() {
-		let slotsRemaining = 3;
-
+	/**
+	 * Yields a series of pokemon dex ids for the pokemon in the queue
+	 * and hatchery, starting from the end off the queue.
+	 */
+	function* pokemonInTopSlots(count=Infinity) {
 		for (let slot = page.queueLength() - 1; slot >= 0; slot -= 1) {
-			const pkmn = page.getQueueSlotDexId(slot);
-			if (page.pokemonIsContagious(pkmn)) {
-				return true;
-			}
+			yield page.getQueueSlotDexId(slot);
 
-			if (--slotsRemaining <= 0) {
-				return false;
+			if (--count <= 0) {
+				return;
 			}
 		}
 
@@ -764,17 +763,26 @@
 				continue;
 			}
 
-			const pkmn = page.getSlotDexId(slot);
-			if (page.pokemonIsContagious(pkmn)) {
-				return true;
-			}
+			yield page.getSlotDexId(slot);
 
-			if (--slotsRemaining <= 0) {
-				return false;
+			if (--count <= 0) {
+				return;
+			}
+		}
+	}
+
+	function currentSpreaderTypes() {
+		const types = new Set();
+
+		for (const pkmn in pokemonInTopSlots(3)) {
+			if (page.pokemonIsContagious(pkmn)) {
+				for (const t of page.getPokemonType(pkmn)) {
+					types.add(t);
+				}
 			}
 		}
 
-		return false;
+		return types.size > 0? types : null;
 	}
 
 	/**
@@ -800,8 +808,19 @@
 
 		const shinyBreeding = Setting.shinyBreeding.get();
 
+		preferredTypes = new Set(preferredTypes);
+
 		const breedPokerus = canSpreadPokerus();
-		const needSpreader = breedPokerus && !hasSpreaderInHatchery();
+		let needSpreader = false;
+		if (breedPokerus) {
+			const spreaderTypes = currentSpreaderTypes();
+			if (spreaderTypes != null) {
+				needSpreader = true;
+				for (const t of spreaderTypes) {
+					preferredTypes.add(t);
+				}
+			}
+		}
 
 		const maxScore = preferredTypes.length * WEIGHT_PREFERRED_TYPE
 				+ (shinyBreeding? WEIGHT_CURRENT_REGION : 0)
