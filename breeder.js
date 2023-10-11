@@ -823,23 +823,27 @@
 		const shinyBreeding = Setting.shinyBreeding.get();
 
 		preferredTypes = new Set(preferredTypes);
-		const preferredPokerusTypes = new Set(preferredTypes);
+		const preferredSpreaderTypes = new Set(preferredTypes);
+		const preferredUninfectedTypes = new Set(preferredTypes);
 
 		const breedPokerus = canSpreadPokerus();
 		let needSpreader = false;
 		if (breedPokerus) {
-			let pokerusTypes = currentSpreaderTypes();
-			if (pokerusTypes == null) {
-				needSpreader = true;
-				pokerusTypes = currentUninfectedTypes();
+			let spreaderTypes = currentSpreaderTypes();
+			needSpreader = spreaderTypes == null;
+
+			if (spreaderTypes != null) {
+				for (const t of spreaderTypes) {
+					preferredSpreaderTypes.add(t);
+				}
 			}
 
-			for (const t of pokerusTypes) {
-				preferredPokerusTypes.add(t);
+			for (const t of currentUninfectedTypes()) {
+				preferredUninfectedTypes.add(t);
 			}
 		}
 
-		const maxScore = Math.min(2, preferredPokerusTypes.size)
+		const maxScore = Math.min(2, preferredSpreaderTypes.size)
 					* WEIGHT_PREFERRED_TYPE
 				+ (shinyBreeding? WEIGHT_CURRENT_REGION : 0)
 				+ WEIGHT_NOT_SHINY
@@ -868,11 +872,18 @@
 			}
 
 			let relevantTypes = preferredTypes;
-			if (breedPokerus
-					&& ((needSpreader && page.pokemonIsContagious(id))
-						|| (!needSpreader && page.pokemonIsUninfected(id)))) {
-				score += WEIGHT_POKERUS;
-				relevantTypes = preferredPokerusTypes;
+			if (breedPokerus) {
+				if (page.pokemonIsContagious(id)) {
+					relevantTypes = preferredSpreaderTypes;
+					if (needSpreader) {
+						score += WEIGHT_POKERUS;
+					}
+				} else if (page.pokemonIsUninfected(id)) {
+					relevantTypes = preferredUninfectedTypes;
+					if (!needSpreader) {
+						score += WEIGHT_POKERUS;
+					}
+				}
 			}
 
 			const pkmnTypes = Array.from(page.getPokemonType(id));
