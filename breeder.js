@@ -834,12 +834,12 @@
 
 			if (spreaderTypes != null) {
 				for (const t of spreaderTypes) {
-					preferredSpreaderTypes.add(t);
+					preferredUninfectedTypes.add(t);
 				}
 			}
 
 			for (const t of currentUninfectedTypes()) {
-				preferredUninfectedTypes.add(t);
+				preferredSpreaderTypes.add(t);
 			}
 		}
 
