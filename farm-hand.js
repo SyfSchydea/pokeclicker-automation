@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.46+async-wander
+// @version      1.46
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -1987,9 +1987,8 @@
 
 	// Maintain a full field of the specified berry
 	class FullFieldAction {
-		constructor(berry, fullFieldSync=false) {
+		constructor(berry) {
 			this.berry = berry;
-			this.sync = !!fullFieldSync
 		}
 
 		performAction() {
@@ -2124,9 +2123,7 @@
 				return DELAY_HARVEST;
 			}
 
-			if (this.sync
-					&& harvestRedundantBerries(this.berry,
-						{amount: this.amount})) {
+			if (harvestRedundantBerries(this.berry, {amount: this.amount})) {
 				return DELAY_HARVEST;
 			}
 
@@ -2203,7 +2200,7 @@
 	function makeUserWanderTask(berry, expiration) {
 		return new GenericTask(PRIORITY_USER,
 				new TimedExpiration(expiration),
-				new FullFieldAction(berry, false));
+				new FullFieldAction(berry));
 	}
 
 	function makeFieldMutationTask(targetBerry, parentBerry, amount) {
