@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.46
+// @version      1.46+async-wander
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -2003,6 +2003,7 @@
 
 			// Harvest some if we're running low on the berry in question
 			if (page.getBerryAmount(this.berry) < 25
+					&& page.getBerryHarvestAmount(this.berry)
 					&& harvestOne({onlyBerries: [this.berry]}) != null) {
 				return DELAY_HARVEST;
 			}
