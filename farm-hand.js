@@ -2003,7 +2003,7 @@
 
 			// Harvest some if we're running low on the berry in question
 			if (page.getBerryAmount(this.berry) < 25
-					&& page.getBerryHarvestAmount(this.berry)
+					&& page.getBerryHarvestAmount(this.berry) >= 2
 					&& harvestOne({onlyBerries: [this.berry]}) != null) {
 				return DELAY_HARVEST;
 			}
