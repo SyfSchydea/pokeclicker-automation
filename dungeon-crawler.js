@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Dungeon Crawler
 // @namespace    http://tampermonkey.net/
-// @version      1.6
+// @version      1.6+allow-fail
 // @description  Completes dungeons automatically.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -523,12 +523,21 @@
 		constructor(dungeonName, clears) {
 			this.dungeonName = dungeonName;
 			this.playerClears = page.getDungeonClears(dungeonName);
-			this.remainingClears = clears;
+			this.remainingEntries = clears;
+			this.allowFail = false;
+
+			this.taskEntries = 0;
+			this.taskClears = 0;
 		}
 
 		logClear() {
-			this.remainingClears -= 1;
 			this.playerClears += 1;
+			this.taskClears += 1;
+		}
+
+		logDungeonEnter() {
+			this.remainingEntries -= 1;
+			this.taskEntries += 1;
 		}
 
 		getTargetTiles() {
@@ -538,6 +547,22 @@
 			}
 
 			return getChestTiles();
+		}
+
+		report() {
+			console.log("Completed", this.taskClears,
+					...(this.allowFail? ["of", this.taskEntries] : []),
+					"clears of", this.dungeonName)
+		}
+
+		getOptions() {
+			return {
+				allowFail: (value=true) => {
+					this.allowFail = !!value;
+					console.log(value?
+							"Allowing failures" : "Stopping on failure");
+				}
+			};
 		}
 	}
 
@@ -609,22 +634,24 @@
 		}
 
 		if (!page.dungeonActive()) {
-			const expectedClears = currentTask.playerClears;
+			const expectedClears = currentTask.playerClears + 1;
 			const actualClears = page.getDungeonClears(currentTask.dungeonName);
-			if (actualClears != expectedClears) {
+			if (actualClears == expectedClears) {
+				currentTask.logClear();
+			} else if (!currentTask.allowFail) {
 				console.log("Failed to clear dungeon");
 				currentTask = null;
 				return;
 			}
 
-			if (currentTask.remainingClears <= 0) {
-				console.log("Completed requested clears!");
+			if (currentTask.remainingEntries <= 0) {
+				currentTask.report();
 				currentTask = null;
 				return;
 			}
 
 			page.enterDungeon();
-			currentTask.logClear();
+			currentTask.logDungeonEnter();
 
 			scheduleTick(DELAY_ENTER);
 			return;
@@ -671,21 +698,24 @@
 		const dungeonName = page.getCurrentDungeonName();
 		currentTask = new DungeonClearTask(dungeonName, clears);
 		scheduleTick(DELAY_INITIAL);
-		console.log("Attempting to clear", dungeonName, currentTask.remainingClears, "times");
+		console.log("Attempting to clear", dungeonName, currentTask.remainingEntries, "times");
+		return currentTask.getOptions();
 	}
 
 	function cmdItems(clears=10) {
 		const dungeonName = page.getCurrentDungeonName();
 		currentTask = new DungeonItemsTask(dungeonName, clears, true);
 		scheduleTick(DELAY_INITIAL);
-		console.log("Attempting to clear", dungeonName, currentTask.remainingClears, "times. Focusing on items.");
+		console.log("Attempting to clear", dungeonName, currentTask.remainingEntries, "times. Focusing on items.");
+		return currentTask.getOptions();
 	}
 
 	function cmdEnemy(clears=10) {
 		const dungeonName = page.getCurrentDungeonName();
 		currentTask = new DungeonEnemiesTask(dungeonName, clears, true);
 		scheduleTick(DELAY_INITIAL);
-		console.log("Attempting to clear", dungeonName, currentTask.remainingClears, "times. Focusing on enemies.");
+		console.log("Attempting to clear", dungeonName, currentTask.remainingEntries, "times. Focusing on enemies.");
+		return currentTask.getOptions();
 	}
 
 	/**
