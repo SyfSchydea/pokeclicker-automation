@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Dungeon Crawler
 // @namespace    http://tampermonkey.net/
-// @version      1.6+allow-fail
+// @version      1.6+allow-fail+stop-on-shiny
 // @description  Completes dungeons automatically.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -243,6 +243,24 @@
 			}
 
 			return false;
+		},
+
+		/**
+		 * Count how many shinies the player currently has.
+		 *
+		 * @return {number} - Number of distinct shinies.
+		 */
+		getShinyCount() {
+			const party = App.game.party.caughtPokemon;
+			let count = 0;
+
+			for(let i = 0; i < party.length; ++i) {
+				if (party[i].shiny) {
+					count += 1;
+				}
+			}
+
+			return count;
 		},
 	};
 
@@ -524,10 +542,13 @@
 			this.dungeonName = dungeonName;
 			this.playerClears = page.getDungeonClears(dungeonName);
 			this.remainingEntries = clears;
+
 			this.allowFail = false;
+			this.stopOnShiny = false;
 
 			this.taskEntries = 0;
 			this.taskClears = 0;
+			this.startShinies = page.getShinyCount();
 		}
 
 		logClear() {
@@ -538,6 +559,19 @@
 		logDungeonEnter() {
 			this.remainingEntries -= 1;
 			this.taskEntries += 1;
+		}
+
+		shouldStop() {
+			if (this.remainingEntries <= 0) {
+				return true;
+			}
+
+			if (this.stopOnShiny
+					&& page.getShinyCount() > this.startShinies) {
+				return true;
+			}
+
+			return false;
 		}
 
 		getTargetTiles() {
@@ -552,17 +586,29 @@
 		report() {
 			console.log("Completed", this.taskClears,
 					...(this.allowFail? ["of", this.taskEntries] : []),
-					"clears of", this.dungeonName)
+					"clears of", this.dungeonName,
+					...(this.stopOnShiny
+						&& page.getShinyCount() > this.startShinies)?
+						["\nCaught a new shiny"] : []);
 		}
 
 		getOptions() {
-			return {
+			const options = {
 				allowFail: (value=true) => {
 					this.allowFail = !!value;
 					console.log(value?
 							"Allowing failures" : "Stopping on failure");
-				}
+					return options;
+				},
+
+				untilShiny: () => {
+					this.stopOnShiny = true;
+					console.log("Will stop on catching a new shiny");
+					return options;
+				},
 			};
+
+			return options;
 		}
 	}
 
@@ -644,7 +690,7 @@
 				return;
 			}
 
-			if (currentTask.remainingEntries <= 0) {
+			if (currentTask.shouldStop()) {
 				currentTask.report();
 				currentTask = null;
 				return;
