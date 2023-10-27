@@ -586,10 +586,10 @@
 		report() {
 			console.log("Completed", this.taskClears,
 					...(this.allowFail? ["of", this.taskEntries] : []),
-					"clears of", this.dungeonName,
+					"clears of", this.dungeonName, ".",
 					...(this.stopOnShiny
-						&& page.getShinyCount() > this.startShinies)?
-						["\nCaught a new shiny"] : []);
+							&& page.getShinyCount() > this.startShinies)?
+						["\nCaught a new shiny!"] : []);
 		}
 
 		getOptions() {
