@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Digger
 // @namespace    http://tampermonkey.net/
-// @version      1.7
+// @version      1.7+energy-threshold
 // @description  Automates digging underground in Pokéclicker.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -169,6 +169,16 @@
 		 */
 		getMaxEnergy() {
 			return App.game.underground.getMaxEnergy();
+		},
+
+		/**
+		 * Find out how many energy points the player will gain
+		 * each time it is restored passively.
+		 *
+		 * @return {number} - Energy restored amount
+		 */
+		getEnergyRestoredAmount() {
+			return App.game.underground.getEnergyGain();
 		},
 
 		/**
@@ -378,7 +388,7 @@
 	const DELAY_BOMB      =      1000;
 	const DELAY_CHISEL    =       200;
 	const DELAY_SURVEY    =      1000;
-	const DELAY_IDLE      = 60 * 1000;
+	const DELAY_IDLE      = 40 * 1000;
 	const DELAY_NEW_LAYER =  5 * 1000;
 	const DELAY_INIT      =      1000;
 	const DELAY_NO_TASK   = 60 * 1000;
@@ -563,7 +573,8 @@
 				return DELAY_NEW_LAYER;
 			}
 
-			if (page.getEnergy() / page.getMaxEnergy() < 0.75) {
+			const energyThreshold = page.getMaxEnergy() - page.getEnergyRestoredAmount();
+			if (page.getEnergy() <= energyThreshold) {
 				return DELAY_IDLE;
 			}
 
