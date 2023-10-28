@@ -573,8 +573,8 @@
 				return DELAY_NEW_LAYER;
 			}
 
-			const energyThreshold = page.getMaxEnergy() - page.getEnergyRestoredAmount();
-			if (page.getEnergy() <= energyThreshold) {
+			const energyThreshold = page.getMaxEnergy() - page.getEnergyRestoredAmount() - 1;
+			if (page.getEnergy() < energyThreshold) {
 				return DELAY_IDLE;
 			}
 
