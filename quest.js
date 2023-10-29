@@ -1615,7 +1615,7 @@
 		// So move to the boosted route...
 		const returnPos = Setting.returnPosition.get();
 		boosted: if (Setting.followBoosted.get()) {
-			const targetSr = (returnPos || getPlayerLocation()).getSubregion();
+			const targetSr = (returnPos || playerLoc).getSubregion();
 
 			const boostedRouteName = page.getBoostedRouteInSubregion(targetSr);
 			if (boostedRouteName == null) {
@@ -1623,6 +1623,10 @@
 			}
 
 			const boostedRoute = new RouteLocation(boostedRouteName);
+			if (boostedRoute.equals(playerLoc)) {
+				return false;
+			}
+
 			if (boostedRoute.canMoveTo()) {
 				moveToActiveLocation(boostedRoute, "boosted roamer rates");
 				return true;
