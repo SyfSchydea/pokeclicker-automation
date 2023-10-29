@@ -657,8 +657,8 @@
 		}
 
 		window[GRIND_WINDOW_KEY].buyShiny        = cmdBuyShiny;
-		window[GRIND_WINDOW_KEY].evoStoneShiny   = cmdEvoStone,
-		window[GRIND_WINDOW_KEY].tempBattleShiny = cmdTempShiny,
+		window[GRIND_WINDOW_KEY].evoStoneShiny   = cmdEvoStone;
+		window[GRIND_WINDOW_KEY].tempBattleShiny = cmdTempShiny;
 	}
 
 	(function main() {
