@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Login
 // @namespace    http://tampermonkey.net/
-// @version      1.7.1
+// @version      1.7.1+follow-boosted
 // @description  Automatically re-logs in, if you refresh
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -652,11 +652,13 @@
 			loadState,
 		};
 
-		window[GRIND_WINDOW_KEY] = {
-			buyShiny: cmdBuyShiny,
-			evoStoneShiny: cmdEvoStone,
-			tempBattleShiny: cmdTempShiny,
-		};
+		if (!window[GRIND_WINDOW_KEY]) {
+			window[GRIND_WINDOW_KEY] = {};
+		}
+
+		window[GRIND_WINDOW_KEY].buyShiny        = cmdBuyShiny;
+		window[GRIND_WINDOW_KEY].evoStoneShiny   = cmdEvoStone,
+		window[GRIND_WINDOW_KEY].tempBattleShiny = cmdTempShiny,
 	}
 
 	(function main() {
