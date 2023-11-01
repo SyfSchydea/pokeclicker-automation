@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Dungeon Crawler
 // @namespace    http://tampermonkey.net/
-// @version      1.8.6
+// @version      1.8.7
 // @description  Completes dungeons automatically.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -542,6 +542,7 @@
 			this.dungeonName = dungeonName;
 			this.playerClears = page.getDungeonClears(dungeonName);
 
+			this.clearGoal = clears;
 			this.remainingEntries = clears;
 			this.started = page.dungeonActive();
 			if (this.started) {
@@ -754,7 +755,7 @@
 		const dungeonName = page.getCurrentDungeonName();
 		currentTask = new DungeonClearTask(dungeonName, clears);
 		scheduleTick(DELAY_INITIAL);
-		console.log("Attempting to clear", dungeonName, currentTask.remainingEntries, "times");
+		console.log("Attempting to clear", dungeonName, currentTask.clearGoal, "times");
 		return currentTask.getOptions();
 	}
 
@@ -762,7 +763,7 @@
 		const dungeonName = page.getCurrentDungeonName();
 		currentTask = new DungeonItemsTask(dungeonName, clears, true);
 		scheduleTick(DELAY_INITIAL);
-		console.log("Attempting to clear", dungeonName, currentTask.remainingEntries, "times. Focusing on items.");
+		console.log("Attempting to clear", dungeonName, currentTask.clearGoal, "times. Focusing on items.");
 		return currentTask.getOptions();
 	}
 
@@ -770,7 +771,7 @@
 		const dungeonName = page.getCurrentDungeonName();
 		currentTask = new DungeonEnemiesTask(dungeonName, clears, true);
 		scheduleTick(DELAY_INITIAL);
-		console.log("Attempting to clear", dungeonName, currentTask.remainingEntries, "times. Focusing on enemies.");
+		console.log("Attempting to clear", dungeonName, currentTask.clearGoal, "times. Focusing on enemies.");
 		return currentTask.getOptions();
 	}
 
