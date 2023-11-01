@@ -1329,8 +1329,7 @@
 				}
 
 				return (Setting.activeMovement.get()
-						&& canMove() && questRoute.canMoveTo()
-						&& Setting.currentPosition.get() == null);
+						&& canMove() && questRoute.canMoveTo());
 			}
 
 			case QuestType.GYM: {
@@ -1342,12 +1341,8 @@
 
 				const gymTownName = page.getGymTownName(quest.gym);
 				const gymTown = new TownLocation(gymTownName);
-				if (!gymTown.equals(getPlayerLocation())
-						&& (!canMove() || !gymTown.canMoveTo())) {
-					return false;
-				}
-
-				return Setting.currentPosition.get() == null;
+				return (gymTown.equals(getPlayerLocation())
+						|| (canMove() && gymTown.canMoveTo()));
 			}
 
 			case QuestType.CLEAR_DUNGEON: {
