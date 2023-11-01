@@ -554,6 +554,11 @@
 		}
 
 		logClear() {
+			if (!this.started) {
+				this.started = true;
+				return;
+			}
+
 			this.playerClears += 1;
 			this.taskClears += 1;
 		}
@@ -704,8 +709,6 @@
 			scheduleTick(DELAY_ENTER);
 			return;
 		}
-
-		currentTask.started = true;
 
 		if (page.dungeonBusy()) {
 			scheduleTick(DELAY_FIGHTING);
