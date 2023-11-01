@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Dungeon Crawler
 // @namespace    http://tampermonkey.net/
-// @version      1.8.2
+// @version      1.8.3
 // @description  Completes dungeons automatically.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -541,11 +541,9 @@
 		constructor(dungeonName, clears) {
 			this.dungeonName = dungeonName;
 			this.playerClears = page.getDungeonClears(dungeonName);
-			if (!page.dungeonActive()) {
-				this.playerClears -= 1;
-			}
 
 			this.remainingEntries = clears;
+			this.started = page.dungeonActive();
 
 			this.allowFail = false;
 			this.stopOnShiny = false;
@@ -684,7 +682,7 @@
 		}
 
 		if (!page.dungeonActive()) {
-			const expectedClears = currentTask.playerClears + 1;
+			const expectedClears = currentTask.playerClears + (currentTask.started? 1 : 0);
 			const actualClears = page.getDungeonClears(currentTask.dungeonName);
 			if (actualClears == expectedClears) {
 				currentTask.logClear();
@@ -706,6 +704,8 @@
 			scheduleTick(DELAY_ENTER);
 			return;
 		}
+
+		currentTask.started = true;
 
 		if (page.dungeonBusy()) {
 			scheduleTick(DELAY_FIGHTING);
