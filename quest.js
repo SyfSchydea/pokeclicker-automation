@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.2+follow-boosted
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -715,6 +715,38 @@
 		},
 
 		/**
+		 * Find the boosted route which provides
+		 * higher roamer encounter rates within the given subregion.
+		 *
+		 * @param subregionName {string} - Name of the subregion to look up.
+		 * @return              {string} - Name of the route,
+		 *                                 or null if there isn't one.
+		 */
+		getBoostedRouteInSubregion(subregionName) {
+			// Find the matching roamer group
+			let roamerGroupId = null;
+
+			const {regionId, subregion} = this._getSubregion(subregionName);
+			const regionGroups =  RoamingPokemonList.roamerGroups[regionId];
+
+			for (let i = 0; i < regionGroups.length; ++i) {
+				const grp = regionGroups[i];
+				if (grp.subRegions.includes(subregion.id)) {
+					roamerGroupId = i;
+					break;
+				}
+			}
+
+			if (roamerGroupId == null) {
+				return null;
+			}
+
+			// Look up that roamer group
+			const route = RoamingPokemonList.increasedChanceRoute[regionId][roamerGroupId]();
+			return route.routeName;
+		},
+
+		/**
 		 * Move to the given route within the same subregion.
 		 *
 		 * @param routeName {string} - Name of the route to move to.
@@ -897,7 +929,11 @@
 	 * through the page interface defined above.
 	 */
 
+	// Window key for quest related user-facing function
 	const WINDOW_KEY = "quest";
+
+	// Window key for misc user-facing functions
+	const GRIND_WINDOW_KEY = "grind";
 
 	const DELAY_INIT            =  5 * 1000;
 	const DELAY_IDLE            = 10 * 1000;
@@ -1077,6 +1113,7 @@
 
 	Setting.modifyPokeballFilters = new Setting(SETTINGS_SCOPE_SESSION, "pokeballFilters", false);
 	Setting.activeMovement        = new Setting(SETTINGS_SCOPE_SESSION, "activeMovement",  false);
+	Setting.followBoosted         = new Setting(SETTINGS_SCOPE_SESSION, "followBoosted",   false);
 	Setting.freeRefreshes         = new Setting(SETTINGS_SCOPE_SESSION, "freeRefreshes",   false);
 
 	Setting.currentPosition = new Setting(SETTINGS_SCOPE_SESSION, "currentPosition", null, Location.fromRaw);
@@ -1292,8 +1329,7 @@
 				}
 
 				return (Setting.activeMovement.get()
-						&& canMove() && questRoute.canMoveTo()
-						&& Setting.currentPosition.get() == null);
+						&& canMove() && questRoute.canMoveTo());
 			}
 
 			case QuestType.GYM: {
@@ -1305,12 +1341,8 @@
 
 				const gymTownName = page.getGymTownName(quest.gym);
 				const gymTown = new TownLocation(gymTownName);
-				if (!gymTown.equals(getPlayerLocation())
-						&& (!canMove() || !gymTown.canMoveTo())) {
-					return false;
-				}
-
-				return Setting.currentPosition.get() == null;
+				return (gymTown.equals(getPlayerLocation())
+						|| (canMove() && gymTown.canMoveTo()));
 			}
 
 			case QuestType.CLEAR_DUNGEON: {
@@ -1575,7 +1607,28 @@
 		}
 
 		// If we exit the quest loop, there aren't any quest requiring specific locations...
+		// So move to the boosted route...
 		const returnPos = Setting.returnPosition.get();
+		boosted: if (Setting.followBoosted.get()) {
+			const targetSr = (returnPos || playerLoc).getSubregion();
+
+			const boostedRouteName = page.getBoostedRouteInSubregion(targetSr);
+			if (boostedRouteName == null) {
+				break boosted;
+			}
+
+			const boostedRoute = new RouteLocation(boostedRouteName);
+			if (boostedRoute.equals(playerLoc)) {
+				return false;
+			}
+
+			if (boostedRoute.canMoveTo()) {
+				moveToActiveLocation(boostedRoute, "boosted roamer rates");
+				return true;
+			}
+		}
+
+		// Or return  to where we were
 		if (returnPos != null) {
 			const success = returnPos.moveTo();
 			
@@ -1589,6 +1642,8 @@
 
 			return true;
 		}
+
+		return false;
 	}
 
 	function tick() {
@@ -1669,6 +1724,7 @@
 
 	function disableActiveMovement() {
 		Setting.activeMovement.set(false);
+		Setting.followBoosted.set(false);
 		Setting.currentPosition.set(null);
 		Setting.returnPosition.set(null);
 	}
@@ -1756,6 +1812,22 @@
 		console.log("Stopped completing quests");
 	}
 
+	/**
+	 * User-facing command.
+	 * Follow the boosted route near current location.
+	 */
+	function cmdFollowBoosted(value=true) {
+		Setting.followBoosted.set(!!value);
+
+		// Follow boosted requires active movement to be on.
+		if (value) {
+			Setting.activeMovement.set(true);
+		}
+
+		console.log((value? "Started" : "Stopped"),
+				"following boosted routes");
+	}
+
 	function exposeCommands() {
 		window[WINDOW_KEY] = {
 			collectQuests: cmdSetCollect,
@@ -1769,6 +1841,12 @@
 			passiveQuests: cmdPassiveQuests,
 			stop:          cmdStop,
 		};
+
+		if (!window[GRIND_WINDOW_KEY]) {
+			window[GRIND_WINDOW_KEY] = {};
+		}
+
+		window[GRIND_WINDOW_KEY].followBoosted = cmdFollowBoosted;
 	}
 
 	(function main() {
