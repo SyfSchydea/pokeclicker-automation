@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Dungeon Crawler
 // @namespace    http://tampermonkey.net/
-// @version      1.8.4
+// @version      1.8.5
 // @description  Completes dungeons automatically.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -544,6 +544,9 @@
 
 			this.remainingEntries = clears;
 			this.started = page.dungeonActive();
+			if (this.started) {
+				remainingEntries -= 1;
+			}
 
 			this.allowFail = false;
 			this.stopOnShiny = false;
