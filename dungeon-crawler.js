@@ -535,7 +535,7 @@
 	}
 
 	function getNavPolicy(key) {
-		switch (key.navPolicy) {
+		switch (key) {
 			case "clear":
 				return new FastClearNavigationPolicy();
 
