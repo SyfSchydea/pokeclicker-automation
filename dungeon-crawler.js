@@ -576,7 +576,12 @@
 			this.allowFail = false;
 			this.stopOnShiny = false;
 
-			// TODO: Check if the saveManager is available, take a savestate and set a flag if so
+			if (syfScripts?.saveManager?.saveState) {
+				syfScripts.saveManager.saveState(SAVEID_TASK_START);
+				this.haveSaveAtStart = true;
+			} else {
+				this.haveSaveAtStart = false;
+			}
 
 			this.taskEntries = 0;
 			this.taskClears = 0;
@@ -644,19 +649,31 @@
 			sessionStorage.setItem(SSKEY_TASK, json);
 		}
 
-		// TODO: shouldReload()
-			// TODO: Return true if stopOnShiny and not found Shiny
+		foundNewShiny() {
+			return page.getShinyCount() > this.startShinies;
+		}
 
-		// TODO: reload()
-			// TODO: loadState or error if savestate flag not set
+		shouldReload() {
+			return (this.stopOnShiny && !this.foundNewShiny()
+					&& this.haveSaveAtStart);
+		}
+
+		reload() {
+			if (!this.haveSaveAtStart) {
+				throw new Error("No save to reload");
+			}
+
+			this.remainingEntries = 0;
+			this.writePersistant();
+			syfScripts.saveManager.loadState(SAVEID_TASK_START);
+		}
 
 		shouldStop() {
 			if (this.remainingEntries <= 0) {
 				return true;
 			}
 
-			if (this.stopOnShiny
-					&& page.getShinyCount() > this.startShinies) {
+			if (this.stopOnShiny && this.foundNewShiny()) {
 				return true;
 			}
 
@@ -683,8 +700,10 @@
 
 				untilShiny: () => {
 					this.stopOnShiny = true;
-					console.log("Will stop on catching a new shiny");
-					// TODO: Mention save scumming if a save state was made
+					console.log("Will",
+							(this.haveSaveAtStart?
+								"save-scum for" : "stop on catching"),
+							"a new shiny");
 					return options;
 				},
 			};
@@ -797,11 +816,11 @@
 			}
 
 			if (currentTask.shouldStop()) {
-				// TODO:
-				// if (currentTask.shouldReload()) {
-				// 	currentTask.reload();
-				// 	return;
-				// }
+				if (currentTask.shouldReload()) {
+					currentTask.reload();
+					console.log("Reloading to continue dungeon grind");
+					return;
+				}
 
 				currentTask.report();
 				stopTask();
