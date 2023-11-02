@@ -27,6 +27,15 @@
 
 	const page = {
 		/**
+		 * Test if the game has loaded.
+		 *
+		 * @return - Truthy if the game has loaded, false otherwise.
+		 */
+		gameLoaded() {
+			return App?.game;
+		},
+
+		/**
 		 * Not required by interfaces.
 		 * Fetch the dungeon which the player is currently at.
 		 *
@@ -273,10 +282,11 @@
 	 * through the page interface defined above.
 	 */
 
-	const DELAY_ENTER    = 200;
-	const DELAY_FIGHTING = 100;
-	const DELAY_MOVE     = 250;
-	const DELAY_INITIAL  = 500;
+	const DELAY_GAME_LOAD = 1000;
+	const DELAY_ENTER     =  200;
+	const DELAY_FIGHTING  =  100;
+	const DELAY_MOVE      =  250;
+	const DELAY_INITIAL   =  500;
 
 	const SSKEY_TASK = "syfscripts--dungeon--task";
 
@@ -901,6 +911,15 @@
 		startNewTask(amount, new FastClearNavigationPolicy());
 	}
 
+	function onGameLoad(callback) {
+		if (!page.gameLoaded()) {
+			setTimeout(onGameLoad, DELAY_GAME_LOAD, callback);
+			return;
+		}
+
+		callback();
+	}
+
 	(function main() {
 		window.dung = {
 			run: cmdRun,
@@ -918,6 +937,6 @@
 			clearDungeon: cmdScriptClearDungeon,
 		};
 
-		restorePersistantTask();
+		onGameLoad(restorePersistantTask);
 	})();
 })();
