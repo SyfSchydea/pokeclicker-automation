@@ -803,6 +803,7 @@
 
 			page.enterDungeon();
 			currentTask.logDungeonEnter();
+			currentTask.writePersistant();
 
 			scheduleTick(DELAY_ENTER);
 			return;
