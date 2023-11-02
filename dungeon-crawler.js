@@ -663,7 +663,7 @@
 				throw new Error("No save to reload");
 			}
 
-			this.remainingEntries = 0;
+			this.remainingEntries = this.clearGoal;
 			this.writePersistant();
 			syfScripts.saveManager.loadState(SAVEID_TASK_START);
 		}
