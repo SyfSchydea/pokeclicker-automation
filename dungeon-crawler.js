@@ -599,7 +599,7 @@
 			task.allowFail = data.allowFail;
 			task.stopOnShiny = data.stopOnShiny;
 
-			task.remainingClears = data.remainingClears;
+			task.remainingEntries = data.remainingEntries;
 			task.taskEntries = data.taskEntries;
 			task.taskClears = data.taskClears;
 
@@ -635,7 +635,7 @@
 				allowFail: this.allowFail,
 				stopOnShiny: this.stopOnShiny,
 
-				remainingClears: this.remainingClears,
+				remainingEntries: this.remainingEntries,
 				taskEntries: this.taskEntries,
 				taskClears: this.taskClears,
 			};
