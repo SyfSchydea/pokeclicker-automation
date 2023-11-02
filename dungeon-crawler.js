@@ -812,7 +812,6 @@
 
 			page.enterDungeon();
 			currentTask.logDungeonEnter();
-			currentTask.writePersistant();
 			currentTask.reportDebug();
 
 			scheduleTick(DELAY_ENTER);
