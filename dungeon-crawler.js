@@ -583,6 +583,10 @@
 			this.startShinies = page.getShinyCount();
 		}
 
+		reportDebug() {
+			console.log("Clearing", this.dungeonName, this.clearGoal, "times total. Done", this.taskEntries, "/", this.taskClears, "so far.", this.remainingEntries, "left.");
+		}
+
 		static fromData(data) {
 			const task = new DungeonClearTask(data.dungeonName,
 					data.clearGoal, getNavPolicy(data.navPolicy));
@@ -778,6 +782,7 @@
 		}
 
 		if (!page.dungeonActive()) {
+			currentTask.reportDebug();
 			const expectedClears = currentTask.playerClears + (currentTask.started? 1 : 0);
 			const actualClears = page.getDungeonClears(currentTask.dungeonName);
 			if (actualClears == expectedClears) {
