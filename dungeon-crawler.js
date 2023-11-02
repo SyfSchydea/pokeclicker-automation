@@ -584,7 +584,10 @@
 		}
 
 		reportDebug() {
-			console.log("Clearing", this.dungeonName, this.clearGoal, "times total. Done", this.taskEntries, "/", this.taskClears, "so far.", this.remainingEntries, "left.");
+			console.log("Clearing", this.dungeonName,
+					this.clearGoal, "times total.",
+					"Done", this.taskEntries, "/", this.taskClears, "so far.",
+					this.remainingEntries, "left.");
 		}
 
 		static fromData(data) {
@@ -782,7 +785,6 @@
 		}
 
 		if (!page.dungeonActive()) {
-			currentTask.reportDebug();
 			const expectedClears = currentTask.playerClears + (currentTask.started? 1 : 0);
 			const actualClears = page.getDungeonClears(currentTask.dungeonName);
 			if (actualClears == expectedClears) {
@@ -802,6 +804,7 @@
 				// }
 
 				currentTask.report();
+				currentTask.reportDebug();
 				stopTask();
 				return;
 			}
@@ -809,6 +812,7 @@
 			page.enterDungeon();
 			currentTask.logDungeonEnter();
 			currentTask.writePersistant();
+			currentTask.reportDebug();
 
 			scheduleTick(DELAY_ENTER);
 			return;
