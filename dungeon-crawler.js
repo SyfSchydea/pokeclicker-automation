@@ -868,7 +868,9 @@
 		const taskData = JSON.parse(taskJson);
 		currentTask = DungeonClearTask.fromData(taskData);
 
-		console.log("Resuming dungeon task. Cleared", currentTask.dungeonName, currentTask.taskClears, "so far");
+		console.log("Resuming dungeon task. Cleared",
+				currentTask.dungeonName,
+				currentTask.taskClears, "times so far");
 		scheduleTick(DELAY_INITIAL);
 	}
 
