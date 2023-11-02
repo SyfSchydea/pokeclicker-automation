@@ -534,6 +534,22 @@
 		}
 	}
 
+	function getNavPolicy(key) {
+		switch (key.navPolicy) {
+			case "clear":
+				return new FastClearNavigationPolicy();
+
+			case "items":
+				return new ItemsNavigationPolicy();
+
+			case "enemy":
+				return new EnemyNavigationPolicy();
+
+			default:
+				throw new Error("Unknown navigation policy key: " + key);
+		}
+	}
+
 	class DungeonClearTask {
 		constructor(dungeonName, clears, navPolicy) {
 			this.dungeonName = dungeonName;
@@ -557,6 +573,22 @@
 			this.startShinies = page.getShinyCount();
 		}
 
+		static fromData(data) {
+			const task = new DungeonClearTask(data.dungeonName,
+					data.clearGoal, getNavPolicy(data.navPolicy));
+
+			task.startShinies = data.startShinies;
+
+			task.allowFail = data.allowFail;
+			task.stopOnShiny = data.stopOnShiny;
+
+			task.remainingClears = data.remainingClears;
+			task.taskEntries = data.taskEntries;
+			task.taskClears = data.taskClears;
+
+			return task;
+		}
+
 		getTargetTiles() {
 			return this.navigationPolicy.getTargetTiles();
 		}
@@ -576,9 +608,24 @@
 			this.taskEntries += 1;
 		}
 
-		// TODO: writePersistant() {
-			// TODO: Write progress and settings values to sessionStorage
-		// }
+		writePersistant() {
+			const data = {
+				dungeonName: this.dungeonName,
+				clearGoal: this.clearGoal,
+				navPolicy: this.navigationPolicy.getKey(),
+				startShinies: this.startShinies,
+
+				allowFail: this.allowFail,
+				stopOnShiny: this.stopOnShiny,
+
+				remainingClears: this.remainingClears,
+				taskEntries: this.taskEntries,
+				taskClears: this.taskClears,
+			};
+
+			const json = JSON.stringify(data);
+			sessionStorage.setItem(SSKEY_TASK, json);
+		}
 
 		// TODO: shouldReload()
 			// TODO: Return true if stopOnShiny and not found Shiny
@@ -640,6 +687,10 @@
 
 			return getChestTiles();
 		}
+
+		getKey() {
+			return "clear";
+		}
 	}
 
 	// Aim to find all items, then the boss.
@@ -661,6 +712,10 @@
 			}
 
 			return [];
+		}
+
+		getKey() {
+			return "items";
 		}
 	}
 
@@ -688,6 +743,10 @@
 
 			return [];
 		}
+
+		getKey() {
+			return "enemy";
+		}
 	}
 
 	let currentTask = null;
@@ -713,12 +772,10 @@
 			const actualClears = page.getDungeonClears(currentTask.dungeonName);
 			if (actualClears == expectedClears) {
 				currentTask.logClear();
-				// TODO: currentTask.writePersistant();
+				currentTask.writePersistant();
 			} else if (!currentTask.allowFail) {
 				console.log("Failed to clear dungeon");
-				// TODO: Move this to a stopTask function
-				// TODO: Also clear the settings in sessionStorage
-				currentTask = null;
+				stopTask();
 				return;
 			}
 
@@ -730,7 +787,7 @@
 				// }
 
 				currentTask.report();
-				currentTask = null; // TODO: stopTask
+				stopTask();
 				return;
 			}
 
@@ -781,8 +838,26 @@
 	function startNewTask(clears, navPolicy) {
 		const dungeonName = page.getCurrentDungeonName();
 		currentTask = new DungeonClearTask(dungeonName, clears, navPolicy);
-		// TODO: Write task settings to sessionStorage with writePersistant
+		currentTask.writePersistant();
 		scheduleTick(DELAY_INITIAL);
+	}
+
+	function restorePersistantTask() {
+		const taskJson = sessionStorage.getItem(SSKEY_TASK);
+		if (!taskJson) {
+			return;
+		}
+
+		const taskData = JSON.parse(taskJson);
+		currentTask = DungeonClearTask.fromData(taskData);
+
+		console.log("Resuming dungeon task. Cleared", currentTask.dungeonName, currentTask.taskClears, "so far");
+		scheduleTick(DELAY_INITIAL);
+	}
+
+	function stopTask() {
+		sessionStorage.removeItem(SSKEY_TASK);
+		currentTask = null;
 	}
 
 	function cmdRun(clears=10) {
@@ -843,6 +918,6 @@
 			clearDungeon: cmdScriptClearDungeon,
 		};
 
-		// TODO: Restore saved task
+		restorePersistantTask();
 	})();
 })();
