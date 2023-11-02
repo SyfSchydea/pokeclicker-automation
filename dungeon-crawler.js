@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Dungeon Crawler
 // @namespace    http://tampermonkey.net/
-// @version      1.8.7
+// @version      1.8.7+save-scum
 // @description  Completes dungeons automatically.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -278,6 +278,10 @@
 	const DELAY_MOVE     = 250;
 	const DELAY_INITIAL  = 500;
 
+	const SSKEY_TASK = "syfscripts--dungeon--task";
+
+	const SAVEID_TASK_START = "dungeon--task-start";
+
 	/**
 	 * Choose a random element from the array.
 	 */
@@ -552,6 +556,8 @@
 			this.allowFail = false;
 			this.stopOnShiny = false;
 
+			// TODO: Check if the saveManager is available, take a savestate and set a flag if so
+
 			this.taskEntries = 0;
 			this.taskClears = 0;
 			this.startShinies = page.getShinyCount();
@@ -571,6 +577,16 @@
 			this.remainingEntries -= 1;
 			this.taskEntries += 1;
 		}
+
+		// TODO: writePersistant() {
+			// TODO: Write progress and settings values to sessionStorage
+		// }
+
+		// TODO: shouldReload()
+			// TODO: Return true if stopOnShiny and not found Shiny
+
+		// TODO: reload()
+			// TODO: loadState or error if savestate flag not set
 
 		shouldStop() {
 			if (this.remainingEntries <= 0) {
@@ -615,6 +631,7 @@
 				untilShiny: () => {
 					this.stopOnShiny = true;
 					console.log("Will stop on catching a new shiny");
+					// TODO: Mention save scumming if a save state was made
 					return options;
 				},
 			};
@@ -695,15 +712,24 @@
 			const actualClears = page.getDungeonClears(currentTask.dungeonName);
 			if (actualClears == expectedClears) {
 				currentTask.logClear();
+				// TODO: currentTask.writePersistant();
 			} else if (!currentTask.allowFail) {
 				console.log("Failed to clear dungeon");
+				// TODO: Move this to a stopTask function
+				// TODO: Also clear the settings in sessionStorage
 				currentTask = null;
 				return;
 			}
 
 			if (currentTask.shouldStop()) {
+				// TODO:
+				// if (currentTask.shouldReload()) {
+				// 	currentTask.reload();
+				// 	return;
+				// }
+
 				currentTask.report();
-				currentTask = null;
+				currentTask = null; // TODO: stopTask
 				return;
 			}
 
@@ -754,6 +780,8 @@
 	function cmdRun(clears=10) {
 		const dungeonName = page.getCurrentDungeonName();
 		currentTask = new DungeonClearTask(dungeonName, clears);
+		// TODO: Move some of this duplication to a startNewTask function
+		// TODO: Write task settings to sessionStorage with writePersistant
 		scheduleTick(DELAY_INITIAL);
 		console.log("Attempting to clear", dungeonName, currentTask.clearGoal, "times");
 		return currentTask.getOptions();
@@ -793,6 +821,7 @@
 	 */
 	function cmdScriptClearDungeon(amount) {
 		const dungeonName = page.getCurrentDungeonName();
+		// TODO: Use startNewTask here too
 		currentTask = new DungeonClearTask(dungeonName, amount);
 		scheduleTick(DELAY_INITIAL);
 	}
@@ -813,5 +842,7 @@
 			busy: cmdBusy,
 			clearDungeon: cmdScriptClearDungeon,
 		};
+
+		// TODO: Restore saved task
 	})();
 })();
