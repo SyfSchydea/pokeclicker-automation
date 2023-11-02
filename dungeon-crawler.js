@@ -787,19 +787,22 @@
 
 	function cmdRun(clears=10) {
 		startNewTask(clears, new FastClearNavigationPolicy());
-		console.log("Attempting to clear", dungeonName, currentTask.clearGoal, "times");
+		console.log("Attempting to clear", currentTask.dungeonName,
+				currentTask.clearGoal, "times");
 		return currentTask.getOptions();
 	}
 
 	function cmdItems(clears=10) {
 		startNewTask(clears, new ItemsNavigationPolicy());
-		console.log("Attempting to clear", dungeonName, currentTask.clearGoal, "times. Focusing on items.");
+		console.log("Attempting to clear", currentTask.dungeonName,
+				currentTask.clearGoal, "times. Focusing on items.");
 		return currentTask.getOptions();
 	}
 
 	function cmdEnemy(clears=10) {
 		startNewTask(clears, new EnemyNavigationPolicy());
-		console.log("Attempting to clear", dungeonName, currentTask.clearGoal, "times. Focusing on enemies.");
+		console.log("Attempting to clear", currentTask.dungeonName,
+				currentTask.clearGoal, "times. Focusing on enemies.");
 		return currentTask.getOptions();
 	}
 
