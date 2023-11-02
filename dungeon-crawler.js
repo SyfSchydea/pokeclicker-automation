@@ -591,6 +591,7 @@
 		}
 
 		static fromData(data) {
+			console.log(data);
 			const task = new DungeonClearTask(data.dungeonName,
 					data.clearGoal, getNavPolicy(data.navPolicy));
 
