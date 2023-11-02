@@ -546,7 +546,7 @@
 				return new EnemyNavigationPolicy();
 
 			default:
-				throw new Error("Unknown navigation policy key: " + key);
+				throw new Error(`Unknown navigation policy key: '${key}'`);
 		}
 	}
 
