@@ -283,13 +283,6 @@
 	const SAVEID_TASK_START = "dungeon--task-start";
 
 	/**
-	 * Choose a random element from the array.
-	 */
-	function chooseRandom(arr) {
-		return arr[Math.floor(Math.random() * arr.length)];
-	}
-
-	/**
 	 * Generator for each tile in the dungeon.
 	 */
 	function* eachTile(size=page.getGridSize()) {
@@ -542,9 +535,10 @@
 	}
 
 	class DungeonClearTask {
-		constructor(dungeonName, clears) {
+		constructor(dungeonName, clears, navPolicy) {
 			this.dungeonName = dungeonName;
 			this.playerClears = page.getDungeonClears(dungeonName);
+			this.navigationPolicy = navPolicy;
 
 			this.clearGoal = clears;
 			this.remainingEntries = clears;
@@ -561,6 +555,10 @@
 			this.taskEntries = 0;
 			this.taskClears = 0;
 			this.startShinies = page.getShinyCount();
+		}
+
+		getTargetTiles() {
+			return this.navigationPolicy.getTargetTiles();
 		}
 
 		logClear() {
@@ -601,15 +599,6 @@
 			return false;
 		}
 
-		getTargetTiles() {
-			const boss = getBossTile();
-			if (boss) {
-				return [boss];
-			}
-
-			return getChestTiles();
-		}
-
 		report() {
 			console.log("Completed", this.taskClears,
 					...(this.allowFail? ["of", this.taskEntries] : []),
@@ -640,7 +629,21 @@
 		}
 	}
 
-	class DungeonItemsTask extends DungeonClearTask {
+	// Aim to reach the boss as fast as possible.
+	// Target items for flash if the boss location is unknown.
+	class FastClearNavigationPolicy {
+		getTargetTiles() {
+			const boss = getBossTile();
+			if (boss) {
+				return [boss];
+			}
+
+			return getChestTiles();
+		}
+	}
+
+	// Aim to find all items, then the boss.
+	class ItemsNavigationPolicy {
 		getTargetTiles() {
 			const chests = getChestTiles();
 			if (chests.length > 0) {
@@ -661,10 +664,8 @@
 		}
 	}
 
-	/**
-	 * Aims to fight all enemies before finishing the dungeon.
-	 */
-	class DungeonEnemiesTask extends DungeonClearTask {
+	// Find all the items, then all the enemies, then the boss.
+	class EnemyNavigationPolicy {
 		getTargetTiles() {
 			const chests = getChestTiles();
 			if (chests.length > 0) {
@@ -777,28 +778,27 @@
 		return;
 	}
 
-	function cmdRun(clears=10) {
+	function startNewTask(clears, navPolicy) {
 		const dungeonName = page.getCurrentDungeonName();
-		currentTask = new DungeonClearTask(dungeonName, clears);
-		// TODO: Move some of this duplication to a startNewTask function
+		currentTask = new DungeonClearTask(dungeonName, clears, navPolicy);
 		// TODO: Write task settings to sessionStorage with writePersistant
 		scheduleTick(DELAY_INITIAL);
+	}
+
+	function cmdRun(clears=10) {
+		startNewTask(clears, new FastClearNavigationPolicy());
 		console.log("Attempting to clear", dungeonName, currentTask.clearGoal, "times");
 		return currentTask.getOptions();
 	}
 
 	function cmdItems(clears=10) {
-		const dungeonName = page.getCurrentDungeonName();
-		currentTask = new DungeonItemsTask(dungeonName, clears, true);
-		scheduleTick(DELAY_INITIAL);
+		startNewTask(clears, new ItemsNavigationPolicy());
 		console.log("Attempting to clear", dungeonName, currentTask.clearGoal, "times. Focusing on items.");
 		return currentTask.getOptions();
 	}
 
 	function cmdEnemy(clears=10) {
-		const dungeonName = page.getCurrentDungeonName();
-		currentTask = new DungeonEnemiesTask(dungeonName, clears, true);
-		scheduleTick(DELAY_INITIAL);
+		startNewTask(clears, new EnemyNavigationPolicy());
 		console.log("Attempting to clear", dungeonName, currentTask.clearGoal, "times. Focusing on enemies.");
 		return currentTask.getOptions();
 	}
@@ -820,10 +820,7 @@
 	 * @param amount {number} - Number of times to clear the dungeon.
 	 */
 	function cmdScriptClearDungeon(amount) {
-		const dungeonName = page.getCurrentDungeonName();
-		// TODO: Use startNewTask here too
-		currentTask = new DungeonClearTask(dungeonName, amount);
-		scheduleTick(DELAY_INITIAL);
+		startNewTask(amount, new FastClearNavigationPolicy());
 	}
 
 	(function main() {
