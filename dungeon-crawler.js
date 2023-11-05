@@ -561,7 +561,7 @@
 	}
 
 	class DungeonClearTask {
-		constructor(dungeonName, clears, navPolicy) {
+		constructor(dungeonName, clears, navPolicy, suppressSaveState=false) {
 			this.dungeonName = dungeonName;
 			this.playerClears = page.getDungeonClears(dungeonName);
 			this.navigationPolicy = navPolicy;
@@ -576,7 +576,7 @@
 			this.allowFail = false;
 			this.stopOnShiny = false;
 
-			if (syfScripts?.saveManager?.saveState) {
+			if (!suppressSaveState && syfScripts?.saveManager?.saveState) {
 				syfScripts.saveManager.saveState(SAVEID_TASK_START);
 				this.haveSaveAtStart = true;
 			} else {
@@ -597,7 +597,7 @@
 
 		static fromData(data) {
 			const task = new DungeonClearTask(data.dungeonName,
-					data.clearGoal, getNavPolicy(data.navPolicy));
+					data.clearGoal, getNavPolicy(data.navPolicy), true);
 
 			task.startShinies = data.startShinies;
 
@@ -607,6 +607,7 @@
 			task.remainingEntries = data.remainingEntries;
 			task.taskEntries = data.taskEntries;
 			task.taskClears = data.taskClears;
+			task.haveSaveAtStart = data.haveSaveAtStart;
 
 			return task;
 		}
@@ -643,6 +644,7 @@
 				remainingEntries: this.remainingEntries,
 				taskEntries: this.taskEntries,
 				taskClears: this.taskClears,
+				haveSaveAtStart: this.haveSaveAtStart,
 			};
 
 			const json = JSON.stringify(data);
