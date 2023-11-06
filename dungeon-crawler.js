@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Dungeon Crawler
 // @namespace    http://tampermonkey.net/
-// @version      1.8.7+save-scum
+// @version      1.9
 // @description  Completes dungeons automatically.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
