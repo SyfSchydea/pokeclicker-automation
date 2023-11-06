@@ -92,7 +92,7 @@
 			clearTimeout(tickTimeout);
 		}
 
-		setTimeout(delay, tick);
+		setTimeout(tick, delay);
 	}
 
 	function tick() {
