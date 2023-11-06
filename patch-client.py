@@ -13,6 +13,7 @@ SCRIPT_SOURCE_FILES = [
 	"safari.js",
 	"auto-login.js",
 	"quest.js",
+	"frontier.js",
 ]
 
 # relative to game's home directory
