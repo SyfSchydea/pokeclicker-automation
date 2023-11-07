@@ -131,7 +131,9 @@
 	}
 
 	function cmdStop() {
+		page.stopFrontier();
 		active = false;
+		console.log("Stopping running the Battle Frontier");
 	}
 
 	(function main() {
