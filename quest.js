@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      1.3+shadow-quests
+// @version      1.4
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
