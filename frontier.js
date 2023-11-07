@@ -59,6 +59,10 @@
 		 *                           False to restart from round 1.
 		 */
 		startFrontier(resume=true) {
+			if (!this.inFrontier() || this.frontierRunning()) {
+				return;
+			}
+
 			BattleFrontierRunner.start(resume);
 		},
 
@@ -66,6 +70,10 @@
 		 * Stop battling in the Battle Frontier.
 		 */
 		stopFrontier() {
+			if (!this.frontierRunning()) {
+				return;
+			}
+
 			BattleFrontierRunner.end();
 		},
 	};
