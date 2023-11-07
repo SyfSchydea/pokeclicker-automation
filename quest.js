@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.3+shadow-quests
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -15,6 +15,7 @@
 	const QuestType = {
 		BERRY:          "berry",
 		CATCH_POKEMON:  "catch",
+		CATCH_SHADOW:   "shadow",
 		CATCH_SHINIES:  "shiny",
 		CATCH_TYPED:    "catch typed",
 		CLEAR_DUNGEON:  "clear dungeon",
@@ -48,6 +49,7 @@
 	// Enum for pokemon encounter types
 	const EncounterType = {
 		REGULAR: "regular",
+		SHADOW:  "shadow",
 		SHINY:   "shiny",
 
 		Typed: {}, // Populated dynamically
@@ -213,6 +215,10 @@
 					details = {type: QuestType.CATCH_POKEMON};
 					break;
 
+				case CatchShadowsQuest:
+					details = {type: QuestType.CATCH_SHADOW};
+					break;
+
 				case CatchShiniesQuest:
 					details = {type: QuestType.CATCH_SHINIES};
 					break;
@@ -320,6 +326,20 @@
 				],
 				shiny: false,
 				shadow: false,
+				pokerus: GameConstants.Pokerus.Uninfected,
+				caught: true,
+				caughtShiny: true,
+				caughtShadow: true,
+			},
+
+			[EncounterType.SHADOW]: {
+				encounterType: "Dungeon",
+				pokemonType:[
+					PokemonType.None,
+					PokemonType.None,
+				],
+				shiny: false,
+				shadow: true,
 				pokerus: GameConstants.Pokerus.Uninfected,
 				caught: true,
 				caughtShiny: true,
@@ -889,6 +909,83 @@
 		},
 
 		/**
+		 * Check if the given dungeon has
+		 * at least one shadow pokemon encounter in it.
+		 * Shadow pokemon may be assumed to be in trainer battles.
+		 *
+		 * @param dungeonName {string} - Name of dungeon to check.
+		 * @return                     - Truthy if the dungeon has
+		 *                               shadow pokemon.
+		 *                               Falsey if it has no shadow pokemon,
+		 *                               or does not exist.
+		 */
+		dungeonHasShadowPokemon(dungeonName) {
+			const dung = dungeonList[dungeonName];
+			if (!dung) {
+				return false;
+			}
+
+			for (const enemy of [...dung.enemyList, ...dung.bossList]) {
+				if (!(enemy instanceof DungeonTrainer)) {
+					continue;
+				}
+
+				for (const pkmn of enemy.team) {
+					if (pkmn.shadow == GameConstants.ShadowStatus.Shadow) {
+						return true;
+					}
+				}
+			}
+
+			return false;
+		},
+
+		/**
+		 * Find the proportion of boss encounters in a dungeon
+		 * which include a shadow pokemon.
+		 *
+		 * @param dungeonName {string} - Name of dungeon to check.
+		 * @return            {number} - Proportion of boss encounters
+		 *                               which include a shadow pokemon.
+		 *                               1 means every boss encounter has
+		 *                               a shadow pokemon.
+		 *                               0 means there are no shadow pokemon
+		 *                               in boss encounters.
+		 */
+		getDungeonShadowPokemonProp(dungeonName) {
+			const dung = dungeonList[dungeonName];
+			if (!dung) {
+				return false;
+			}
+
+			const bosses = dung.bossList;
+			let shadowBosses = 0;
+			bossLoop: for (const boss of bosses) {
+				if (!(boss instanceof DungeonTrainer)) {
+					continue;
+				}
+
+				for (const pkmn of boss.team) {
+					if (pkmn.shadow == GameConstants.ShadowStatus.Shadow) {
+						shadowBosses += 1;
+						continue bossLoop;
+					}
+				}
+			}
+
+			return shadowBosses / bosses.length;
+		},
+
+		/**
+		 * Get a list of all dungeons in the game.
+		 *
+		 * @return {String[]} - List of dungeon names.
+		 */
+		getAllDungeons() {
+			return Object.keys(dungeonList);
+		},
+
+		/**
 		 * Check how many dungeon tokens the player has.
 		 *
 		 * @return {number} - Number of dungeon tokens.
@@ -1220,6 +1317,17 @@
 				{ball: "Ultraball", amountRequired: 100},
 				{ball: "Greatball", amountRequired: 100},
 			]),
+
+		FilterType.shadow = new FilterType(EncounterType.SHADOW,
+			"!syfQuest shadow", {
+				shadow: true,
+				caughtShadow: true,
+			},
+			"hasShadowFilter")
+			.setPokeballPreferences([
+				{ball: "Ultraball", amountRequired: 1000},
+				{ball: "Greatball", amountRequired: 1000},
+			]),
 	];
 
 	FilterType.byPokemonType = {};
@@ -1271,6 +1379,46 @@
 				&& typesEncountered[pokemonType] > 0;
 	}
 
+	/**
+	 * Find a preferred dungeon for catching shadow pokemon.
+	 *
+	 * @return {TownLocation|null} - Dungeon name or null if none found.
+	 */
+	function getShadowDungeon() {
+		// If the player's existing location is good enough, use that.
+		const playerLoc = getPlayerLocation();
+		if (playerLoc != null && playerLoc.type == "town"
+				&& page.dungeonCompleted(playerLoc.name)
+				&& page.dungeonHasShadowPokemon(playerLoc.name)) {
+			return playerLoc;
+		}
+
+		let bestDungName = null;
+		let bestDungShadowRatio = Infinity;
+		for (const dungName of page.getAllDungeons()) {
+			if (!page.dungeonCompleted(dungName)) {
+				continue;
+			}
+
+			const shadowProp = page.getDungeonShadowPokemonProp(dungName);
+			if (shadowProp <= 0) {
+				continue;
+			}
+
+			const dtPerShadow = page.getDungeonCost(dungName) / shadowProp;
+			if (dtPerShadow < bestDungShadowRatio) {
+				bestDungName = dungName;
+				bestDungShadowRatio = dtPerShadow;
+			}
+		}
+
+		if (bestDungName == null) {
+			return null;
+		}
+
+		return new TownLocation(bestDungName);
+	}
+
 	function questIsEligible(questIdx) {
 		if (!page.canStartQuest(questIdx)) {
 			return false;
@@ -1297,6 +1445,33 @@
 			case QuestType.CATCH_POKEMON:
 				return (page.willCatch(EncounterType.REGULAR)
 						|| Setting.modifyPokeballFilters.get());
+
+			case QuestType.CATCH_SHADOW: {
+				if (!page.willCatch(EncounterType.SHADOW)
+						&& !Setting.modifyPokeballFilters.get()) {
+					return false;
+				}
+
+				if (!Setting.activeMovement.get()) {
+					return false;
+				}
+
+				const shadowTown = getShadowDungeon();
+				if (shadowTown == null) {
+					return false;
+				}
+
+				if (!canAffordDungeonRuns(shadowTown.name,
+							quest.amountRemaining * 5)) {
+					return false;
+				}
+
+				if (!window.syfScripts?.dungeonCrawler?.canClearDungeons?.()) {
+					return false;
+				}
+
+				return true;
+			}
 
 			case QuestType.CATCH_SHINIES:
 				return (page.willCatch(EncounterType.SHINY)
@@ -1411,6 +1586,15 @@
 					FilterType.regular.addFilter();
 					return true;
 
+				case QuestType.CATCH_SHADOW:
+					if (page.willCatch(EncounterType.SHADOW)) {
+						FilterType.shadow.isRequired = true;
+						continue;
+					}
+
+					FilterType.shadow.addFilter();
+					return true;
+
 				case QuestType.CATCH_SHINIES:
 					if (page.willCatch(EncounterType.SHINY)) {
 						FilterType.shiny.isRequired = true;
@@ -1500,6 +1684,21 @@
 		return new RouteLocation(bestRoute);
 	}
 
+	function canRunDungeon(dungeon, amount=1) {
+		return (page.dungeonCompleted(dungeon)
+			&& window.syfScripts?.dungeonCrawler?.canClearDungeons?.()
+			&& canAffordDungeonRuns(dungeon, amount));
+	}
+
+	function runDungeon(amount=1) {
+		if (window.syfScripts.dungeonCrawler.busy()) {
+			return false;
+		}
+
+		window.syfScripts.dungeonCrawler.clearDungeon(amount);
+		return true;
+	}
+
 	function updateActiveMovement() {
 		if (!canMove()) {
 			return false;
@@ -1578,22 +1777,35 @@
 					continue;
 				}
 
+				case QuestType.CATCH_SHADOW: {
+					const shadowDungeon = getShadowDungeon();
+					if (shadowDungeon == null
+							|| !canRunDungeon(shadowDungeon.name,
+								quest.amountRemaining)) {
+						continue;
+					}
+
+					if (shadowDungeon.equals(playerLoc)) {
+						return runDungeon(quest.amountRemaining);
+					}
+
+					if (shadowDungeon.canMoveTo()) {
+						moveToActiveLocation(shadowDungeon,
+								"shadow pokemon quest");
+						return true;
+					}
+
+					return false;
+				}
+
 				case QuestType.CLEAR_DUNGEON: {
-					if (!page.dungeonCompleted(quest.dungeon)
-							|| !window.syfScripts?.dungeonCrawler?.canClearDungeons?.()
-							|| !canAffordDungeonRuns(quest.dungeon, quest.amountRemaining)){
+					if (!canRunDungeon(quest.dungeon, quest.amountRemaining)) {
 						continue;
 					}
 
 					const dungeonTown = new TownLocation(quest.dungeon);
 					if (dungeonTown.equals(playerLoc)) {
-						if (window.syfScripts.dungeonCrawler.busy()) {
-							return false;
-						}
-
-						window.syfScripts.dungeonCrawler.clearDungeon(
-								quest.amountRemaining);
-						return true;
+						return runDungeon(quest.amountRemaining);
 					}
 
 					if (dungeonTown.canMoveTo()) {
