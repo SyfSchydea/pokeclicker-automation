@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PokéClicker - Auto-breeder
 // @namespace    http://tampermonkey.net/
-// @version      1.26.1
+// @version      1.27
 // @description  Handles breeding eggs automatically
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -155,6 +155,17 @@
 		 */
 		getSlotDexId(slotIdx) {
 			return App.game.breeding.eggList[slotIdx]().pokemon;
+		},
+
+		/**
+		 * Fetch the dex ID of the pokemon in the given queue slot.
+		 * Undefined behaviour if called on an empty slot.
+		 *
+		 * @param slotIdx {number} - Index of the slot to check.
+		 * @return        {number} - Pokedex id of the pokemon in this slot.
+		 */
+		getQueueSlotDexId(slotIdx) {
+			return App.game.breeding.queueList()[slotIdx];
 		},
 
 		/**
@@ -502,6 +513,30 @@
 		},
 
 		/**
+		 * Check if the given pokemon is able to spread the pokerus.
+		 *
+		 * @param dexId {number} - Pokedex if of the species to look up.
+		 * @return               - Truthy if the pokemon is contagious,
+		 *                         falsey if not.
+		 */
+		pokemonIsContagious(dexId) {
+			const pkmn = App.game.party.getPokemon(dexId);
+			return pkmn.pokerus >= GameConstants.Pokerus.Contagious;
+		},
+
+		/**
+		 * Check if the given pokemon has yet to contract the pokerus.
+		 *
+		 * @param dexId {number} - Pokedex if of the species to look up.
+		 * @return               - Truthy if the pokemon can catch pokerus,
+		 *                         falsey if not.
+		 */
+		pokemonIsUninfected(dexId) {
+			const pkmn = App.game.party.getPokemon(dexId);
+			return pkmn.pokerus <= GameConstants.Pokerus.Uninfected;
+		},
+
+		/**
 		 * Find Pokémon types preferred by current active quests.
 		 *
 		 * @return {string[]} - List of types preferred by Pokémon type quests.
@@ -691,6 +726,79 @@
 		return str[0].toUpperCase() + str.slice(1).toLowerCase();
 	}
 
+	function canSpreadPokerus() {
+		let hasContagious = false;
+		let hasUninfected = false;
+
+		for (const id of shuffle(page.getCaughtPokemon())) {
+			if (page.pokemonIsContagious(id)) {
+				hasContagious = true;
+			} else if (page.pokemonIsUninfected(id)) {
+				hasUninfected = true;
+			}
+
+			if (hasContagious && hasUninfected) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Yields a series of pokemon dex ids for the pokemon in the queue
+	 * and hatchery, starting from the end off the queue.
+	 */
+	function* pokemonInTopSlots(count=Infinity) {
+		for (let slot = page.queueLength() - 1; slot >= 0; slot -= 1) {
+			yield page.getQueueSlotDexId(slot);
+
+			if (--count <= 0) {
+				return;
+			}
+		}
+
+		for (let slot = 3; slot >= 0; slot -= 1) {
+			if (page.slotIsEmpty(slot)) {
+				continue;
+			}
+
+			yield page.getSlotDexId(slot);
+
+			if (--count <= 0) {
+				return;
+			}
+		}
+	}
+
+	function currentSpreaderTypes() {
+		const types = new Set();
+
+		for (const pkmn of pokemonInTopSlots(3)) {
+			if (page.pokemonIsContagious(pkmn)) {
+				for (const t of page.getPokemonType(pkmn)) {
+					types.add(t);
+				}
+			}
+		}
+
+		return types.size > 0? types : null;
+	}
+
+	function currentUninfectedTypes() {
+		const types = new Set();
+
+		for (const pkmn of pokemonInTopSlots(3)) {
+			if (page.pokemonIsUninfected(pkmn)) {
+				for (const t of page.getPokemonType(pkmn)) {
+					types.add(t);
+				}
+			}
+		}
+
+		return types;
+	}
+
 	/**
 	 * Choose a pokemon to be bred.
 	 *
@@ -702,9 +810,10 @@
 	 * @return               {number} - Pokedex id of the chosen pokemon.
 	 */
 	function getBreedableMon(preferredTypes=[]) {
-		const WEIGHT_PREFERRED_TYPE = 4;
-		const WEIGHT_NOT_SHINY      = 2;
-		const WEIGHT_CURRENT_REGION = 1;
+		const WEIGHT_POKERUS        = 12;
+		const WEIGHT_PREFERRED_TYPE =  4;
+		const WEIGHT_NOT_SHINY      =  2;
+		const WEIGHT_CURRENT_REGION =  1;
 
 		const parentMonId = page.getBabyParent();
 		if (parentMonId != null) {
@@ -713,9 +822,32 @@
 
 		const shinyBreeding = Setting.shinyBreeding.get();
 
-		const maxScore = preferredTypes.length * WEIGHT_PREFERRED_TYPE
+		preferredTypes = new Set(preferredTypes);
+		const preferredSpreaderTypes = new Set(preferredTypes);
+		const preferredUninfectedTypes = new Set(preferredTypes);
+
+		const breedPokerus = canSpreadPokerus();
+		let needSpreader = false;
+		if (breedPokerus) {
+			let spreaderTypes = currentSpreaderTypes();
+			needSpreader = spreaderTypes == null;
+
+			if (spreaderTypes != null) {
+				for (const t of spreaderTypes) {
+					preferredUninfectedTypes.add(t);
+				}
+			}
+
+			for (const t of currentUninfectedTypes()) {
+				preferredSpreaderTypes.add(t);
+			}
+		}
+
+		const maxScore = Math.min(2, preferredSpreaderTypes.size)
+					* WEIGHT_PREFERRED_TYPE
 				+ (shinyBreeding? WEIGHT_CURRENT_REGION : 0)
-				+ WEIGHT_NOT_SHINY;
+				+ WEIGHT_NOT_SHINY
+				+ (breedPokerus? WEIGHT_POKERUS : 0);
 
 		let bestMon = null;
 		let bestScore = -1;
@@ -735,14 +867,30 @@
 				}
 			}
 
-			for (let type of preferredTypes) {
-				if (Array.from(page.getPokemonType(id)).includes(type)) {
-					score += WEIGHT_PREFERRED_TYPE;
+			if (page.pokemonIsFromHighestRegion(id) || page.pokemonIsFromCurrentRegion(id)) {
+				score += WEIGHT_CURRENT_REGION;
+			}
+
+			let relevantTypes = preferredTypes;
+			if (breedPokerus) {
+				if (page.pokemonIsContagious(id)) {
+					relevantTypes = preferredSpreaderTypes;
+					if (needSpreader) {
+						score += WEIGHT_POKERUS;
+					}
+				} else if (page.pokemonIsUninfected(id)) {
+					relevantTypes = preferredUninfectedTypes;
+					if (!needSpreader) {
+						score += WEIGHT_POKERUS;
+					}
 				}
 			}
 
-			if (page.pokemonIsFromHighestRegion(id) || page.pokemonIsFromCurrentRegion(id)) {
-				score += WEIGHT_CURRENT_REGION;
+			const pkmnTypes = Array.from(page.getPokemonType(id));
+			for (const type of pkmnTypes) {
+				if (relevantTypes.has(type)) {
+					score += WEIGHT_PREFERRED_TYPE;
+				}
 			}
 
 			if (bestMon == null || score > bestScore) {

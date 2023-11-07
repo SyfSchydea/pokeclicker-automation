@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.43
+// @version      1.46.1
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -378,7 +378,7 @@
 			const SPECIAL_BERRIES = [BerryType.Kasib, BerryType.Kebia];
 
 			const farming = App.game.farming;
-			const harvestAmountRequirement = !excludeSpecial && this.getBerryAmount("Passho") >= 25? 1 : 2;
+			const harvestAmountRequirement = !excludeSpecial && this.getBerryAmount("Passho") >= 25? 0.5 : 2;
 
 			let validBerries = farming.berryData
 				// Only take berries which yield more from harvesting (eg. Lum does not)
@@ -1265,6 +1265,20 @@
 		0,  1,  0,  1,  0,
 	]);
 
+	/*
+	 * Layout for getting a Starf mutation.
+	 *  0 - Lum
+	 *  1 - All Roseli
+	 *  2 - All-but-one Roseli
+	 */
+	const STARF_LAYOUT_LUM = convertMutationLayout([
+		2, 2, 1, 2, 2,
+		2, 0, 1, 0, 2,
+		1, 1, 1, 1, 1,
+		2, 0, 1, 0, 2,
+		2, 2, 1, 2, 2,
+	]);
+
 	/**
 	 * List of grow mutations which we attempt but don't
 	 * try to deduce them from the code.
@@ -1526,16 +1540,49 @@
 					const usePassho = page.getBerryHarvestAmount(trueTargetBerry) <= 1;
 
 					if (usePassho) {
+						const passhoSpots = new Set();
+						const wacanSpots = new Set(SURROUND_LAYOUT[1]);
+
+						// Plant Wacans if there's time for the Wacan to grow
+						// and then a Passho to mature.
+						const thresholdAge = (page.getBerryMaturityAge("Wacan")
+								+ page.getBerryMaturityAge("Passho"));
+
+						for (const i of SURROUND_LAYOUT[0]) {
+							if (page.plotIsEmpty(i)) {
+								continue;
+							}
+
+							const berry = page.getBerryInPlot(i);
+							if (page.getBerryHarvestAmount(berry) > 1) {
+								continue;
+							}
+
+							const timeToMaturity = (page.getBerryMaturityAge(berry)
+									- page.getPlotAge(i));
+							if (timeToMaturity <= thresholdAge) {
+								for (const j of adjacentPlots(i)) {
+									wacanSpots.delete(j) && passhoSpots.add(j);
+								}
+							}
+						}
+
 						plantingPhases.push({
 							berry: "Passho",
-							plots: SURROUND_LAYOUT[1],
+							plots: passhoSpots,
+						}, {
+							berry: "Wacan",
+							plots: wacanSpots,
 						}, {
 							berry: targetBerry,
 							plots: SURROUND_LAYOUT[0],
 						});
 						harvestingPhases.push({
 							exceptBerries: ["Passho"],
-							plots: SURROUND_LAYOUT[1],
+							plots: passhoSpots,
+						}, {
+							exceptBerries: ["Wacan"],
+							plots: wacanSpots,
 						}, {
 							exceptBerries: [targetBerry, trueTargetBerry],
 							plots: SURROUND_LAYOUT[0],
@@ -1956,6 +2003,7 @@
 
 			// Harvest some if we're running low on the berry in question
 			if (page.getBerryAmount(this.berry) < 25
+					&& page.getBerryHarvestAmount(this.berry) >= 2
 					&& harvestOne({onlyBerries: [this.berry]}) != null) {
 				return DELAY_HARVEST;
 			}
@@ -2115,6 +2163,28 @@
 
 			if (plantOne(this.berries[0], layout[0]) != null
 					|| plantOne(this.berries[1], layout[1]) != null) {
+				return DELAY_PLANT;
+			}
+
+			return DELAY_IDLE;
+		}
+	}
+
+	class StarfMutationAction {
+		performAction() {
+			const layout = STARF_LAYOUT_LUM;
+
+			if (plantOne("Roseli", layout[1]) != null
+					|| plantOne("Lum", layout[0]) != null) {
+				return DELAY_PLANT;
+			}
+
+			if (harvestOne({exceptBerries: ["Roseli", "Lum"]}) != null) {
+				return DELAY_HARVEST;
+			}
+
+			if (countEmpty() > 1
+					&& plantOne("Roseli", layout[2]) != null) {
 				return DELAY_PLANT;
 			}
 
@@ -2760,6 +2830,14 @@
 				priority = currentTask.priority;
 				break mutationTasks;
 			}
+
+			if (!hasBerry("Starf") && page.getBerryAmount("Roseli") >= 23) {
+				console.log("Farming for a Starf");
+				currentTask = new GenericTask(priority = PRIORITY_MUTATION,
+					new BerryUnlockExpiration("Starf"),
+					new StarfMutationAction());
+				break mutationTasks;
+			}
 		}
 	}
 
@@ -2936,7 +3014,7 @@
 		}
 
 		// Most berries can be farmed normally if they have a harvest amount above 1
-		const harvestAmount = page.getBerryAmount(berryName);
+		const harvestAmount = page.getBerryHarvestAmount(berryName);
 		if (harvestAmount >= 2) {
 			return true;
 		}

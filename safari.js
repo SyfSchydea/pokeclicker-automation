@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Safari Ranger
 // @namespace    http://tampermonkey.net/
-// @version      1.5.3
+// @version      1.7
 // @description  This script will automate the safari zone.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -219,6 +219,52 @@
 		},
 
 		/**
+		 * Throw the specified type of bait at the current enemy pokemon.
+		 *
+		 * @param baitType {string} - Type of bait. "Bait", "Razz", or "Nanab".
+		 */
+		throwBait(baitType) {
+			const bait = BaitList[baitType];
+			if (!bait) {
+				throw new Error(`'${baitType}' is not a valid bait.`);
+			}
+
+			if (!this.isOnSafari() || !this.inBattle() || SafariBattle.busy()) {
+				return;
+			}
+
+			// Check we have enough
+			// Note that standard bait returns a string containing an infinity symbol as its amount
+			const amount = bait.amount;
+			if (typeof amount == "number" && amount <= 0) {
+				throw new Error("You don't have enough " + baitType);
+			}
+
+			SafariBattle.selectedBait(bait);
+			SafariBattle.throwBait();
+		},
+
+		/**
+		 * Check how many of the given bait the player has.
+		 *
+		 * @param baitType {string} - Type of bait. "Bait", "Razz", or "Nanab".
+		 */
+		getBaitAmount(baitType) {
+			const bait = BaitList[baitType];
+			if (!bait) {
+				throw new Error(`'${baitType}' is not a valid bait.`);
+			}
+
+			// Note that standard bait returns a string containing an infinity symbol as its amount
+			const amount = bait.amount;
+			if (typeof amount != "number") {
+				return Infinity;
+			}
+
+			return amount;
+		},
+
+		/**
 		 * Get the number of balls the player has left.
 		 *
 		 * @return {number} - Number of balls.
@@ -319,6 +365,15 @@
 		enemyAngered() {
 			return SafariBattle.enemy.angry > 0;
 		},
+
+		/**
+		 * Fetch the save key of the currently loaded save.
+		 *
+		 * @return {string} - Save key if currently logged in, or an empty string if not.
+		 */
+		getSaveKey() {
+			return Save.key;
+		},
 	};
 
 	//////////////////////////
@@ -335,6 +390,58 @@
 	const DELAY_TASK_START = 1000;
 	const DELAY_WALK       =  250;
 	const DELAY_BATTLE     = 1500;
+
+	const SETTINGS_SCOPE_SAVE = {
+		storage: localStorage,
+		getKey: () => "syfschydea--farm--settings--" + page.getSaveKey(),
+	};
+	const SETTINGS_SCOPE_SESSION = {
+		storage: sessionStorage,
+		getKey: () => "syfschydea--farm--settings",
+	};
+
+	/**
+	 * Holds info about a single value which exists in settings.
+	 */
+	class Setting {
+		// readFn may be passed to process the raw value when reading
+		constructor(scope, key, defaultVal, readFn=x=>x) {
+			this.scope = scope;
+			this.key = key;
+			this.defaultVal = defaultVal;
+			this.readFn = readFn;
+		}
+
+		_read() {
+			const settingsJson = this.scope.storage.getItem(
+					this.scope.getKey());
+
+			if (!settingsJson) {
+				return {};
+			}
+
+			return JSON.parse(settingsJson);
+		}
+
+		get() {
+			const settings = this._read();
+
+			if (!(this.key in settings)) {
+				return this.defaultVal;
+			}
+
+			return this.readFn(settings[this.key]);
+		}
+
+		set(val) {
+			const settings = this._read();
+			settings[this.key] = val;
+			this.scope.storage.setItem(this.scope.getKey(),
+					JSON.stringify(settings));
+		}
+	}
+
+	Setting.useRocks = new Setting(SETTINGS_SCOPE_SAVE, "useRocks", true);
 
 	const DIRECTIONS = {
 		"up":    {x:  0, y: -1},
@@ -647,6 +754,31 @@
 		}
 	}
 
+	/**
+	 * Throw a bait for the sake of getting the xp.
+	 * Returns true on success, false if a suitable bait is not found.
+	 */
+	function throwWasteBait() {
+		const RESERVE_AMOUNT = 100;
+
+		if (Setting.useRocks.get()) {
+			page.throwBait("Bait");
+			return true;
+		}
+
+		if (page.getBaitAmount("Razz") > RESERVE_AMOUNT) {
+			page.throwBait("Razz");
+			return true;
+		}
+
+		if (page.getBaitAmount("Nanab") > RESERVE_AMOUNT) {
+			page.throwBait("Nanab");
+			return true;
+		}
+
+		return false;
+	}
+
 	// Throw rocks until a given level
 	class GrindLevelTask {
 		constructor(targetLevel) {
@@ -657,6 +789,8 @@
 			}
 
 			this.targetLevel = targetLevel;
+
+			this.success = true;
 		}
 
 		describe() {
@@ -665,7 +799,8 @@
 
 		hasExpired() {
 			return (!page.isOnSafari()
-					|| page.getLevel() >= this.targetLevel)
+					|| page.getLevel() >= this.targetLevel
+					|| !this.success)
 		}
 
 		action() {
@@ -674,7 +809,12 @@
 					return DELAY_BATTLE;
 				}
 
-				page.throwRock();
+				if (Setting.useRocks.get()) {
+					page.throwRock();
+				} else {
+					this.success = throwWasteBait();
+				}
+
 				return DELAY_BATTLE;
 			}
 
@@ -714,7 +854,7 @@
 				} else if (page.getEnemyAngryCatchRate() < 0.7) {
 					// Only attempt to catch pokemon which have a decent chance of catching.
 					page.runFromBattle();
-				} else if (!page.enemyAngered()) {
+				} else if (!page.enemyAngered() && Setting.useRocks.get()) {
 					// Throw rocks at enemies to anger them before using the balls on them.
 					page.throwRock();
 				} else {
@@ -774,8 +914,7 @@
 
 	function cmdGrindLevel(targetLevel) {
 		if (typeof targetLevel != "number" || targetLevel <= 0) {
-			console.error("targetLevel must be a positive number");
-			return;
+			throw new Error("targetLevel must be a positive number");
 		}
 
 		startTask(new GrindLevelTask(targetLevel));
@@ -789,12 +928,26 @@
 		currentTask = null;
 	}
 
+	/**
+	 * User-facing command.
+	 * Set whether the script should use rocks and normal bait
+	 * on pokemon in the safari zone.
+	 * On ACSRQ saves, this should be set to false.
+	 */
+	function cmdUseRocks(value=true) {
+		Setting.useRocks.set(!!value);
+
+		console.log((value? "Started" : "Stopped"),
+				"using rocks and normal bait");
+	}
+
 	(function main() {
 		window[WINDOW_KEY] = {
 			findShiny:  cmdFindShiny,
 			stop:       cmdStop,
 			grindLevel: cmdGrindLevel,
 			items:      cmdItems,
+			useRocks:   cmdUseRocks,
 		};
 	})();
 })();

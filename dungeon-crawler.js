@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Dungeon Crawler
 // @namespace    http://tampermonkey.net/
-// @version      1.6
+// @version      1.9
 // @description  Completes dungeons automatically.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -26,6 +26,15 @@
 	 */
 
 	const page = {
+		/**
+		 * Test if the game has loaded.
+		 *
+		 * @return - Truthy if the game has loaded, false otherwise.
+		 */
+		gameLoaded() {
+			return App?.game;
+		},
+
 		/**
 		 * Not required by interfaces.
 		 * Fetch the dungeon which the player is currently at.
@@ -244,6 +253,24 @@
 
 			return false;
 		},
+
+		/**
+		 * Count how many shinies the player currently has.
+		 *
+		 * @return {number} - Number of distinct shinies.
+		 */
+		getShinyCount() {
+			const party = App.game.party.caughtPokemon;
+			let count = 0;
+
+			for(let i = 0; i < party.length; ++i) {
+				if (party[i].shiny) {
+					count += 1;
+				}
+			}
+
+			return count;
+		},
 	};
 
 	//////////////////////////
@@ -255,17 +282,15 @@
 	 * through the page interface defined above.
 	 */
 
-	const DELAY_ENTER    = 200;
-	const DELAY_FIGHTING = 100;
-	const DELAY_MOVE     = 250;
-	const DELAY_INITIAL  = 500;
+	const DELAY_GAME_LOAD = 1000;
+	const DELAY_ENTER     =  200;
+	const DELAY_FIGHTING  =  100;
+	const DELAY_MOVE      =  250;
+	const DELAY_INITIAL   =  500;
 
-	/**
-	 * Choose a random element from the array.
-	 */
-	function chooseRandom(arr) {
-		return arr[Math.floor(Math.random() * arr.length)];
-	}
+	const SSKEY_TASK = "syfscripts--dungeon--task";
+
+	const SAVEID_TASK_START = "dungeon--task-start";
 
 	/**
 	 * Generator for each tile in the dungeon.
@@ -519,18 +544,179 @@
 		}
 	}
 
+	function getNavPolicy(key) {
+		switch (key) {
+			case "clear":
+				return new FastClearNavigationPolicy();
+
+			case "items":
+				return new ItemsNavigationPolicy();
+
+			case "enemy":
+				return new EnemyNavigationPolicy();
+
+			default:
+				throw new Error(`Unknown navigation policy key: '${key}'`);
+		}
+	}
+
 	class DungeonClearTask {
-		constructor(dungeonName, clears) {
+		constructor(dungeonName, clears, navPolicy, suppressSaveState=false) {
 			this.dungeonName = dungeonName;
 			this.playerClears = page.getDungeonClears(dungeonName);
-			this.remainingClears = clears;
+			this.navigationPolicy = navPolicy;
+
+			this.clearGoal = clears;
+			this.remainingEntries = clears;
+			this.started = page.dungeonActive();
+			if (this.started) {
+				this.remainingEntries -= 1;
+			}
+
+			this.allowFail = false;
+			this.stopOnShiny = false;
+
+			if (!suppressSaveState && syfScripts?.saveManager?.saveState) {
+				syfScripts.saveManager.saveState(SAVEID_TASK_START);
+				this.haveSaveAtStart = true;
+			} else {
+				this.haveSaveAtStart = false;
+			}
+
+			this.taskEntries = 0;
+			this.taskClears = 0;
+			this.startShinies = page.getShinyCount();
+		}
+
+		reportDebug() {
+			console.log("Clearing", this.dungeonName,
+					this.clearGoal, "times total.",
+					"Done", this.taskEntries, "/", this.taskClears, "so far.",
+					this.remainingEntries, "left.");
+		}
+
+		static fromData(data) {
+			const task = new DungeonClearTask(data.dungeonName,
+					data.clearGoal, getNavPolicy(data.navPolicy), true);
+
+			task.startShinies = data.startShinies;
+
+			task.allowFail = data.allowFail;
+			task.stopOnShiny = data.stopOnShiny;
+
+			task.remainingEntries = data.remainingEntries;
+			task.taskEntries = data.taskEntries;
+			task.taskClears = data.taskClears;
+			task.haveSaveAtStart = data.haveSaveAtStart;
+
+			return task;
+		}
+
+		getTargetTiles() {
+			return this.navigationPolicy.getTargetTiles();
 		}
 
 		logClear() {
-			this.remainingClears -= 1;
+			if (!this.started) {
+				this.started = true;
+				return;
+			}
+
 			this.playerClears += 1;
+			this.taskClears += 1;
 		}
 
+		logDungeonEnter() {
+			this.remainingEntries -= 1;
+			this.taskEntries += 1;
+		}
+
+		writePersistant() {
+			const data = {
+				dungeonName: this.dungeonName,
+				clearGoal: this.clearGoal,
+				navPolicy: this.navigationPolicy.getKey(),
+				startShinies: this.startShinies,
+
+				allowFail: this.allowFail,
+				stopOnShiny: this.stopOnShiny,
+
+				remainingEntries: this.remainingEntries,
+				taskEntries: this.taskEntries,
+				taskClears: this.taskClears,
+				haveSaveAtStart: this.haveSaveAtStart,
+			};
+
+			const json = JSON.stringify(data);
+			sessionStorage.setItem(SSKEY_TASK, json);
+		}
+
+		foundNewShiny() {
+			return page.getShinyCount() > this.startShinies;
+		}
+
+		shouldReload() {
+			return (this.stopOnShiny && !this.foundNewShiny()
+					&& this.haveSaveAtStart);
+		}
+
+		reload() {
+			if (!this.haveSaveAtStart) {
+				throw new Error("No save to reload");
+			}
+
+			this.remainingEntries = this.clearGoal;
+			this.writePersistant();
+			syfScripts.saveManager.loadState(SAVEID_TASK_START);
+		}
+
+		shouldStop() {
+			if (this.remainingEntries <= 0) {
+				return true;
+			}
+
+			if (this.stopOnShiny && this.foundNewShiny()) {
+				return true;
+			}
+
+			return false;
+		}
+
+		report() {
+			console.log("Completed", this.taskClears,
+					...(this.allowFail? ["of", this.taskEntries] : []),
+					"clears of", this.dungeonName, ".",
+					...(this.stopOnShiny
+							&& page.getShinyCount() > this.startShinies)?
+						["\nCaught a new shiny!"] : []);
+		}
+
+		getOptions() {
+			const options = {
+				allowFail: (value=true) => {
+					this.allowFail = !!value;
+					console.log(value?
+							"Allowing failures" : "Stopping on failure");
+					return options;
+				},
+
+				untilShiny: () => {
+					this.stopOnShiny = true;
+					console.log("Will",
+							(this.haveSaveAtStart?
+								"save-scum for" : "stop on catching"),
+							"a new shiny");
+					return options;
+				},
+			};
+
+			return options;
+		}
+	}
+
+	// Aim to reach the boss as fast as possible.
+	// Target items for flash if the boss location is unknown.
+	class FastClearNavigationPolicy {
 		getTargetTiles() {
 			const boss = getBossTile();
 			if (boss) {
@@ -539,9 +725,14 @@
 
 			return getChestTiles();
 		}
+
+		getKey() {
+			return "clear";
+		}
 	}
 
-	class DungeonItemsTask extends DungeonClearTask {
+	// Aim to find all items, then the boss.
+	class ItemsNavigationPolicy {
 		getTargetTiles() {
 			const chests = getChestTiles();
 			if (chests.length > 0) {
@@ -560,12 +751,14 @@
 
 			return [];
 		}
+
+		getKey() {
+			return "items";
+		}
 	}
 
-	/**
-	 * Aims to fight all enemies before finishing the dungeon.
-	 */
-	class DungeonEnemiesTask extends DungeonClearTask {
+	// Find all the items, then all the enemies, then the boss.
+	class EnemyNavigationPolicy {
 		getTargetTiles() {
 			const chests = getChestTiles();
 			if (chests.length > 0) {
@@ -588,6 +781,10 @@
 
 			return [];
 		}
+
+		getKey() {
+			return "enemy";
+		}
 	}
 
 	let currentTask = null;
@@ -609,22 +806,31 @@
 		}
 
 		if (!page.dungeonActive()) {
-			const expectedClears = currentTask.playerClears;
+			const expectedClears = currentTask.playerClears + (currentTask.started? 1 : 0);
 			const actualClears = page.getDungeonClears(currentTask.dungeonName);
-			if (actualClears != expectedClears) {
+			if (actualClears == expectedClears) {
+				currentTask.logClear();
+				currentTask.writePersistant();
+			} else if (!currentTask.allowFail) {
 				console.log("Failed to clear dungeon");
-				currentTask = null;
+				stopTask();
 				return;
 			}
 
-			if (currentTask.remainingClears <= 0) {
-				console.log("Completed requested clears!");
-				currentTask = null;
+			if (currentTask.shouldStop()) {
+				if (currentTask.shouldReload()) {
+					currentTask.reload();
+					console.log("Reloading to continue dungeon grind");
+					return;
+				}
+
+				currentTask.report();
+				stopTask();
 				return;
 			}
 
 			page.enterDungeon();
-			currentTask.logClear();
+			currentTask.logDungeonEnter();
 
 			scheduleTick(DELAY_ENTER);
 			return;
@@ -667,25 +873,52 @@
 		return;
 	}
 
-	function cmdRun(clears=10) {
+	function startNewTask(clears, navPolicy) {
 		const dungeonName = page.getCurrentDungeonName();
-		currentTask = new DungeonClearTask(dungeonName, clears);
+		currentTask = new DungeonClearTask(dungeonName, clears, navPolicy);
+		currentTask.writePersistant();
 		scheduleTick(DELAY_INITIAL);
-		console.log("Attempting to clear", dungeonName, currentTask.remainingClears, "times");
+	}
+
+	function restorePersistantTask() {
+		const taskJson = sessionStorage.getItem(SSKEY_TASK);
+		if (!taskJson) {
+			return;
+		}
+
+		const taskData = JSON.parse(taskJson);
+		currentTask = DungeonClearTask.fromData(taskData);
+
+		console.log("Resuming dungeon task. Cleared",
+				currentTask.dungeonName,
+				currentTask.taskClears, "times so far");
+		scheduleTick(DELAY_INITIAL);
+	}
+
+	function stopTask() {
+		sessionStorage.removeItem(SSKEY_TASK);
+		currentTask = null;
+	}
+
+	function cmdRun(clears=10) {
+		startNewTask(clears, new FastClearNavigationPolicy());
+		console.log("Attempting to clear", currentTask.dungeonName,
+				currentTask.clearGoal, "times");
+		return currentTask.getOptions();
 	}
 
 	function cmdItems(clears=10) {
-		const dungeonName = page.getCurrentDungeonName();
-		currentTask = new DungeonItemsTask(dungeonName, clears, true);
-		scheduleTick(DELAY_INITIAL);
-		console.log("Attempting to clear", dungeonName, currentTask.remainingClears, "times. Focusing on items.");
+		startNewTask(clears, new ItemsNavigationPolicy());
+		console.log("Attempting to clear", currentTask.dungeonName,
+				currentTask.clearGoal, "times. Focusing on items.");
+		return currentTask.getOptions();
 	}
 
 	function cmdEnemy(clears=10) {
-		const dungeonName = page.getCurrentDungeonName();
-		currentTask = new DungeonEnemiesTask(dungeonName, clears, true);
-		scheduleTick(DELAY_INITIAL);
-		console.log("Attempting to clear", dungeonName, currentTask.remainingClears, "times. Focusing on enemies.");
+		startNewTask(clears, new EnemyNavigationPolicy());
+		console.log("Attempting to clear", currentTask.dungeonName,
+				currentTask.clearGoal, "times. Focusing on enemies.");
+		return currentTask.getOptions();
 	}
 
 	/**
@@ -705,9 +938,16 @@
 	 * @param amount {number} - Number of times to clear the dungeon.
 	 */
 	function cmdScriptClearDungeon(amount) {
-		const dungeonName = page.getCurrentDungeonName();
-		currentTask = new DungeonClearTask(dungeonName, amount);
-		scheduleTick(DELAY_INITIAL);
+		startNewTask(amount, new FastClearNavigationPolicy());
+	}
+
+	function onGameLoad(callback) {
+		if (!page.gameLoaded()) {
+			setTimeout(onGameLoad, DELAY_GAME_LOAD, callback);
+			return;
+		}
+
+		callback();
 	}
 
 	(function main() {
@@ -726,5 +966,7 @@
 			busy: cmdBusy,
 			clearDungeon: cmdScriptClearDungeon,
 		};
+
+		onGameLoad(restorePersistantTask);
 	})();
 })();
