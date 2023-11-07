@@ -76,6 +76,28 @@
 
 			BattleFrontierRunner.end();
 		},
+
+		/**
+		 * Enter the Battle Frontier from the town.
+		 */
+		enterFrontier() {
+			if (!this.atFrontierTown() || this.inFrontier()) {
+				return;
+			}
+
+			App.game.battleFrontier.enter();
+		},
+
+		/**
+		 * Leave the Battle Frontier.
+		 */
+		leaveFrontier() {
+			if (!this.inFrontier() || this.frontierRunning()) {
+				return;
+			}
+
+			App.game.battleFrontier.leave();
+		},
 	};
 
 	//////////////////////////
@@ -108,9 +130,14 @@
 			return;
 		}
 
-		if (!page.atFrontierTown() || !page.inFrontier()) {
+		if (!page.atFrontierTown()) {
 			active = false;
 			return;
+		}
+
+		if (!page.inFrontier()) {
+			page.enterFrontier();
+			return scheduleTick(DELAY_TASK_START);
 		}
 
 		if (!page.frontierRunning()) {
@@ -121,7 +148,7 @@
 	}
 
 	function cmdStart() {
-		if (!page.inFrontier()) {
+		if (!page.atFrontierTown()) {
 			throw new Error("Must be at the Battle Frontier to start using it");
 		}
 
