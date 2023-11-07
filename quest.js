@@ -1367,9 +1367,14 @@
 					return false;
 				}
 
+				if (!Setting.activeMovement.get()) {
+					return false;
+				}
+
 				const currentTown = getPlayerLocation();
 				if (currentTown == null || currentTown.type != "town"
-						|| !page.dungeonHasShadowPokemon(currentTown.name)) {
+						|| !page.dungeonHasShadowPokemon(currentTown.name)
+						|| !page.gymCompleted(currentTown.name)) {
 					return false;
 				}
 
