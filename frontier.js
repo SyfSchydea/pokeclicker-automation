@@ -121,6 +121,10 @@
 	}
 
 	function cmdStart() {
+		if (!page.inFrontier()) {
+			throw new Error("Must be at the Battle Frontier to start using it");
+		}
+
 		active = true;
 		scheduleTick(DELAY_TASK_START);
 		console.log("Starting to run the Battle Frontier");
