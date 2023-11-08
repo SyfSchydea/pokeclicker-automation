@@ -1552,7 +1552,7 @@
 						|| (canMove() && dungeonTown.canMoveTo()));
 			}
 
-			case: QuestType.BATTLE_FRONTIER:
+			case QuestType.BATTLE_FRONTIER:
 				if (!Setting.activeMovement.get()) {
 					return false;
 				}
