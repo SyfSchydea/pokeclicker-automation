@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Syf Scripts - Battle Frontier
 // @namespace    http://tampermonkey.net/
-// @version      1.0+frontier-quests
+// @version      1.0.1
 // @description  Completes the Battle Frontier automatically.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
