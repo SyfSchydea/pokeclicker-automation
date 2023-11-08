@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      1.4
+// @version      1.4+frontier-quests
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -13,22 +13,23 @@
 
 	// Enum for types of quests encountered
 	const QuestType = {
-		BERRY:          "berry",
-		CATCH_POKEMON:  "catch",
-		CATCH_SHADOW:   "shadow",
-		CATCH_SHINIES:  "shiny",
-		CATCH_TYPED:    "catch typed",
-		CLEAR_DUNGEON:  "clear dungeon",
-		DUNGEON_TOKENS: "dungeon tokens",
-		FARM_POINTS:    "farm points",
-		GEMS:           "gems",
-		GYM:            "gym",
-		HATCH_EGGS:     "hatch eggs",
-		MINE_ITEMS:     "mine items",
-		MINE_LAYERS:    "mine layers",
-		POKEDOLLARS:    "pokedollars",
-		ROUTE_DEFEAT:   "route defeat",
-		USE_POKEBALL:   "use pokeball",
+		BERRY:           "berry",
+		BATTLE_FRONTIER: "battle frontier",
+		CATCH_POKEMON:   "catch",
+		CATCH_SHADOW:    "shadow",
+		CATCH_SHINIES:   "shiny",
+		CATCH_TYPED:     "catch typed",
+		CLEAR_DUNGEON:   "clear dungeon",
+		DUNGEON_TOKENS:  "dungeon tokens",
+		FARM_POINTS:     "farm points",
+		GEMS:            "gems",
+		GYM:             "gym",
+		HATCH_EGGS:      "hatch eggs",
+		MINE_ITEMS:      "mine items",
+		MINE_LAYERS:     "mine layers",
+		POKEDOLLARS:     "pokedollars",
+		ROUTE_DEFEAT:    "route defeat",
+		USE_POKEBALL:    "use pokeball",
 
 		// Any quest types not yet handled by the script
 		UNKNOWN: "unknown",
@@ -267,6 +268,10 @@
 						type: QuestType.CLEAR_DUNGEON,
 						dungeon: quest.dungeon,
 					};
+					break;
+
+				case ClearBattleFrontier:
+					details = {type: QuestType.BATTLE_FRONTIER};
 					break;
 
 				default:
@@ -1082,6 +1087,11 @@
 		// True if we reached the location.
 		// False if more steps are needed.
 		moveTo() {
+			if (syfScripts?.battleFrontier?.active?.()) {
+				syfScripts.battleFrontier.stop();
+				return false;
+			}
+
 			if (this._moveToSubregion()) {
 				return false;
 			}
@@ -1215,6 +1225,8 @@
 
 	Setting.currentPosition = new Setting(SETTINGS_SCOPE_SESSION, "currentPosition", null, Location.fromRaw);
 	Setting.returnPosition  = new Setting(SETTINGS_SCOPE_SESSION, "returnPosition",  null, Location.fromRaw);
+
+	const BATTLE_FRONTIER_TOWN = new TownLocation("Battle Frontier");
 
 	class FilterType {
 		constructor(encounterType, name, options, settingsKey) {
@@ -1351,6 +1363,10 @@
 
 		if (page.isInTown()) {
 			return new TownLocation(page.getCurrentTown());
+		}
+
+		if (syfScripts?.battleFrontier?.active?.()) {
+			return BATTLE_FRONTIER_TOWN;
 		}
 
 		return null;
@@ -1542,6 +1558,17 @@
 						|| (canMove() && dungeonTown.canMoveTo()));
 			}
 
+			case QuestType.BATTLE_FRONTIER:
+				if (!Setting.activeMovement.get()) {
+					return false;
+				}
+
+				if (!syfScripts?.battleFrontier?.ready?.()) {
+					return false;
+				}
+
+				return BATTLE_FRONTIER_TOWN.canMoveTo();
+
 			default:
 				return false;
 		}
@@ -1635,7 +1662,8 @@
 	}
 
 	function canMove() {
-		return page.isOnRoute() || page.isInTown();
+		return page.isOnRoute() || page.isInTown()
+				|| syfScripts?.battleFrontier?.active?.();
 	}
 
 	function moveToActiveLocation(loc, reason=null) {
@@ -1815,6 +1843,28 @@
 
 					continue;
 				}
+
+				case QuestType.BATTLE_FRONTIER:
+					if (!syfScripts?.battleFrontier?.ready?.()) {
+						continue;
+					}
+
+					if (!BATTLE_FRONTIER_TOWN.canMoveTo()) {
+						continue;
+					}
+
+					if (!BATTLE_FRONTIER_TOWN.equals(playerLoc)) {
+						moveToActiveLocation(BATTLE_FRONTIER_TOWN,
+								"battle frontier quest");
+						return true;
+					}
+
+					if (syfScripts.battleFrontier.active()) {
+						return false;
+					}
+
+					syfScripts.battleFrontier.start();
+					return true;
 			}
 		}
 
