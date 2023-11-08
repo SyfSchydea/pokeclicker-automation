@@ -1226,6 +1226,8 @@
 	Setting.currentPosition = new Setting(SETTINGS_SCOPE_SESSION, "currentPosition", null, Location.fromRaw);
 	Setting.returnPosition  = new Setting(SETTINGS_SCOPE_SESSION, "returnPosition",  null, Location.fromRaw);
 
+	const BATTLE_FRONTIER_TOWN = new TownLocation("Battle Frontier");
+
 	class FilterType {
 		constructor(encounterType, name, options, settingsKey) {
 			this.encounterType = encounterType;
@@ -1361,6 +1363,10 @@
 
 		if (page.isInTown()) {
 			return new TownLocation(page.getCurrentTown());
+		}
+
+		if (syfScripts?.battleFrontier?.active?.()) {
+			return BATTLE_FRONTIER_TOWN;
 		}
 
 		return null;
@@ -1561,7 +1567,7 @@
 					return false;
 				}
 
-				return new TownLocation("Battle Frontier").canMoveTo();
+				return BATTLE_FRONTIER_TOWN.canMoveTo();
 
 			default:
 				return false;
@@ -1838,18 +1844,17 @@
 					continue;
 				}
 
-				case QuestType.BATTLE_FRONTIER: {
+				case QuestType.BATTLE_FRONTIER:
 					if (!syfScripts?.battleFrontier?.ready?.()) {
 						continue;
 					}
 
-					const bfTown = new TownLocation("Battle Frontier");
-					if (!bfTown.canMoveTo()) {
+					if (!BATTLE_FRONTIER_TOWN.canMoveTo()) {
 						continue;
 					}
 
-					if (!bfTown.equals(playerLoc)) {
-						moveToActiveLocation(bfTown,
+					if (!BATTLE_FRONTIER_TOWN.equals(playerLoc)) {
+						moveToActiveLocation(BATTLE_FRONTIER_TOWN,
 								"battle frontier quest");
 						return true;
 					}
@@ -1860,7 +1865,6 @@
 
 					syfScripts.battleFrontier.start();
 					return true;
-				}
 			}
 		}
 
