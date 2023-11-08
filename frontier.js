@@ -173,10 +173,24 @@
 		console.log("Stopping running the Battle Frontier");
 	}
 
+	function cmdActive() {
+		return active || page.inFrontier();
+	}
+
 	(function main() {
 		window[WINDOW_KEY] = {
 			start: cmdStart,
 			stop:  cmdStop,
+		};
+
+		if (!window.syfScripts) {
+			window.syfScripts = {};
+		}
+
+		window.syfScripts.battleFrontier = {
+			active: cmdActive,
+			start:  cmdStart,
+			stop:   cmdStop,
 		};
 	})();
 })();
