@@ -13,22 +13,23 @@
 
 	// Enum for types of quests encountered
 	const QuestType = {
-		BERRY:          "berry",
-		CATCH_POKEMON:  "catch",
-		CATCH_SHADOW:   "shadow",
-		CATCH_SHINIES:  "shiny",
-		CATCH_TYPED:    "catch typed",
-		CLEAR_DUNGEON:  "clear dungeon",
-		DUNGEON_TOKENS: "dungeon tokens",
-		FARM_POINTS:    "farm points",
-		GEMS:           "gems",
-		GYM:            "gym",
-		HATCH_EGGS:     "hatch eggs",
-		MINE_ITEMS:     "mine items",
-		MINE_LAYERS:    "mine layers",
-		POKEDOLLARS:    "pokedollars",
-		ROUTE_DEFEAT:   "route defeat",
-		USE_POKEBALL:   "use pokeball",
+		BERRY:           "berry",
+		BATTLE_FRONTIER: "battle frontier",
+		CATCH_POKEMON:   "catch",
+		CATCH_SHADOW:    "shadow",
+		CATCH_SHINIES:   "shiny",
+		CATCH_TYPED:     "catch typed",
+		CLEAR_DUNGEON:   "clear dungeon",
+		DUNGEON_TOKENS:  "dungeon tokens",
+		FARM_POINTS:     "farm points",
+		GEMS:            "gems",
+		GYM:             "gym",
+		HATCH_EGGS:      "hatch eggs",
+		MINE_ITEMS:      "mine items",
+		MINE_LAYERS:     "mine layers",
+		POKEDOLLARS:     "pokedollars",
+		ROUTE_DEFEAT:    "route defeat",
+		USE_POKEBALL:    "use pokeball",
 
 		// Any quest types not yet handled by the script
 		UNKNOWN: "unknown",
@@ -267,6 +268,10 @@
 						type: QuestType.CLEAR_DUNGEON,
 						dungeon: quest.dungeon,
 					};
+					break;
+
+				case ClearBattleFrontier:
+					details = {type: QuestType.BATTLE_FRONTIER},
 					break;
 
 				default:
@@ -1082,6 +1087,11 @@
 		// True if we reached the location.
 		// False if more steps are needed.
 		moveTo() {
+			if (syfScripts?.battleFrontier?.active?.()) {
+				syfScripts.battleFrontier.stop();
+				return false;
+			}
+
 			if (this._moveToSubregion()) {
 				return false;
 			}
@@ -1542,6 +1552,17 @@
 						|| (canMove() && dungeonTown.canMoveTo()));
 			}
 
+			case: QuestType.BATTLE_FRONTIER:
+				if (!Setting.activeMovement.get()) {
+					return false;
+				}
+
+				if (!syfScripts?.battleFrontier?.ready?.()) {
+					return false;
+				}
+
+				return new TownLocation("Battle Frontier").canMoveTo();
+
 			default:
 				return false;
 		}
@@ -1635,7 +1656,8 @@
 	}
 
 	function canMove() {
-		return page.isOnRoute() || page.isInTown();
+		return page.isOnRoute() || page.isInTown()
+				|| syfScripts?.battleFrontier?.active?.();
 	}
 
 	function moveToActiveLocation(loc, reason=null) {
@@ -1814,6 +1836,30 @@
 					}
 
 					continue;
+				}
+
+				case QuestType.BATTLE_FRONTIER: {
+					if (!syfScripts?.battleFrontier?.ready?.()) {
+						continue;
+					}
+
+					const bfTown = new TownLocation("Battle Frontier");
+					if (!bfTown.canMoveTo()) {
+						continue;
+					}
+
+					if (!bfTown.equals(playerLoc)) {
+						moveToActiveLocation(bfTown,
+								"battle frontier quest");
+						return true;
+					}
+
+					if (syfScripts.battleFrontier.active()) {
+						return false;
+					}
+
+					syfScripts.battleFrontier.start();
+					return true;
 				}
 			}
 		}

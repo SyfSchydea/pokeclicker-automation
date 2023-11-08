@@ -188,6 +188,7 @@
 		}
 
 		window.syfScripts.battleFrontier = {
+			ready:  () => true,
 			active: cmdActive,
 			start:  cmdStart,
 			stop:   cmdStop,
