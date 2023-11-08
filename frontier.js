@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Syf Scripts - Battle Frontier
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.0+frontier-quests
 // @description  Completes the Battle Frontier automatically.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -111,8 +111,8 @@
 
 	const WINDOW_KEY = "bf";
 
-	const DELAY_DEFAULT    = 10 * 1000;
-	const DELAY_TASK_START =      1000;
+	const DELAY_DEFAULT = 10 * 1000;
+	const DELAY_ACTION  =      1000;
 
 	let active = false;
 	let tickTimeout = null;
@@ -127,6 +127,16 @@
 
 	function tick() {
 		if (!active) {
+			if (page.frontierRunning()) {
+				page.stopFrontier();
+				return scheduleTick(DELAY_ACTION);
+			}
+
+			if (page.inFrontier()) {
+				page.leaveFrontier();
+				return scheduleTick(DELAY_ACTION);
+			}
+
 			return;
 		}
 
@@ -137,7 +147,7 @@
 
 		if (!page.inFrontier()) {
 			page.enterFrontier();
-			return scheduleTick(DELAY_TASK_START);
+			return scheduleTick(DELAY_ACTION);
 		}
 
 		if (!page.frontierRunning()) {
@@ -153,13 +163,13 @@
 		}
 
 		active = true;
-		scheduleTick(DELAY_TASK_START);
+		scheduleTick(DELAY_ACTION);
 		console.log("Starting to run the Battle Frontier");
 	}
 
 	function cmdStop() {
-		page.stopFrontier();
 		active = false;
+		scheduleTick(DELAY_ACTION);
 		console.log("Stopping running the Battle Frontier");
 	}
 
