@@ -1049,7 +1049,7 @@
 		getActiveOakItems() {
 			return App.game.oakItems.itemList
 				.filter((item, id) => App.game.oakItems.isActive(id))
-				.map((item, id) => OakItemType[id]);
+				.map(item => OakItemType[item.name]);
 		},
 	};
 
