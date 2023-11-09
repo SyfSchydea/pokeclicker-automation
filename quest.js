@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.5+amulet-coin
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -13,6 +13,7 @@
 
 	// Enum for types of quests encountered
 	const QuestType = {
+		AMULET_COIN:     "amulet coin",
 		BERRY:           "berry",
 		BATTLE_FRONTIER: "battle frontier",
 		CATCH_POKEMON:   "catch",
@@ -174,6 +175,23 @@
 		},
 
 		/**
+		 * Not required by interface.
+		 * Fetch quest details for an oak item quest.
+		 *
+		 * @param quest {Quest}  - Quest object to analyse.
+		 * @return      {Object} - Details object for the quest.
+		 */
+		_getOakItemQuestDetails(quest) {
+			switch (quest.item) {
+				case OakItemType.Amulet_Coin:
+					return {type: QuestType.AMULET_COIN};
+
+				default:
+					return {type: QuestType.UNKNOWN};
+			}
+		},
+
+		/**
 		 * Look up details about the given quest from the list.
 		 * Returns an object containing at least a 'type' property.
 		 *
@@ -272,6 +290,10 @@
 
 				case ClearBattleFrontier:
 					details = {type: QuestType.BATTLE_FRONTIER};
+					break;
+
+				case UseOakItemQuest:
+					details = this._getOakItemQuestDetails(quest);
 					break;
 
 				default:
@@ -1018,6 +1040,17 @@
 
 			App.game.quests.refreshQuests();
 		},
+
+		/**
+		 * Get a list of currently active Oak items.
+		 *
+		 * @return {string[]} - Array of string ids of oak items.
+		 */
+		getActiveOakItems() {
+			return App.game.oakItems.itemList
+				.filter((item, id) => App.game.oakItems.isActive(id))
+				.map((item, id) => OakItemType[id]);
+		},
 	};
 
 	page._populateTypedEncounters();
@@ -1435,6 +1468,10 @@
 		return new TownLocation(bestDungName);
 	}
 
+	function oakItemIsActive(itemName) {
+		return page.getActiveOakItems().includes(itemName);
+	}
+
 	function questIsEligible(questIdx) {
 		if (!page.canStartQuest(questIdx)) {
 			return false;
@@ -1568,6 +1605,9 @@
 				}
 
 				return BATTLE_FRONTIER_TOWN.canMoveTo();
+
+			case QuestType.AMULET_COIN:
+				return oakItemIsActive("Amulet_Coin");
 
 			default:
 				return false;
