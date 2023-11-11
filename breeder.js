@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PokéClicker - Auto-breeder
 // @namespace    http://tampermonkey.net/
-// @version      1.27
+// @version      1.27+pause-incubation
 // @description  Handles breeding eggs automatically
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -658,6 +658,7 @@
 	Setting.hatchPause      = new Setting(SETTINGS_SCOPE_SAVE,    "hatch-pause", false);
 
 	Setting.eggPause        = new Setting(SETTINGS_SCOPE_SAVE,    "egg-pause", false);
+	Setting.incubatePause   = new Setting(SETTINGS_SCOPE_SAVE,    "incubate-pause", false);
 	Setting.saveScumShinies = new Setting(SETTINGS_SCOPE_SESSION, "save-scumming-shiny", false);
 	Setting.saveScumStartShinyCount =
 	                          new Setting(SETTINGS_SCOPE_SESSION, "save-scumming-shinies-at-start", 0);
@@ -1069,7 +1070,8 @@
 			}
 
 		// Starting breeding/queueing a new mon
-		} else if (canBreed && page.queueLength() < QUEUE_LENGTH_CAP) {
+		} else if (!Setting.incubatePause.get() && canBreed
+				&& page.queueLength() < QUEUE_LENGTH_CAP) {
 			const preferredTypes = new Set(currentTask? currentTask.preferredTypes : []);
 			for (let type of page.getQuestPreferredTypes()) {
 				preferredTypes.add(type);
@@ -1170,6 +1172,21 @@
 
 		console.log((pause? "Paused" : "Resumed") + " hatching eggs."
 				+ (pause? `\nRun '${WINDOW_KEY}.pauseHatch(false)' to resume.` : ""));
+	}
+
+	/**
+	 * User facing command.
+	 * Set whether the script should incubate pokemon most of the time
+	 * for attack bonuses, spread pokerus, or hatch shinies.
+	 *
+	 * @param pause - Truthy to pause.
+	 *                Falsey to continue incubating pokemon as normal.
+	 */
+	function cmdSetIncubatePause(pause=true) {
+		Setting.incubatePause.set(!!pause);
+
+		console.log((pause? "Paused" : "Resumed") + " incubating pokemon."
+				+ (pause? `\nRun '${WINDOW_KEY}.pauseIncubate(false)' to resume.` : ""));
 	}
 
 	function verifySaveManagerLoaded() {
@@ -1348,6 +1365,7 @@
 			shinyBreeding:       cmdShinyBreeding,
 			pauseEggs:           cmdSetEggPause,
 			pauseHatch:          cmdSetHatchPause,
+			pauseIncubate:       cmdSetIncubatePause,
 			saveScumShiny:       cmdSetSaveScumShiny,
 			saveScumHatchShiny:  cmdSetSaveScumHatchShiny,
 			saveScumIncubateEgg: cmdSetSaveScumIncubateEgg,
