@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.46.1
+// @version      1.46.2
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -696,14 +696,17 @@
 				return null;
 			}
 
+			// Only attempt mutations with 8 parents after unlocking all plots
+			const parentCap = this.allPlotsUnlocked()? 8 : 4;
+
 			// Filter for mutations of the right type...
 			const mutation = farming.mutations.find(m => m instanceof GrowNearBerryMutation
 
-					// And which we've actually unlocked
+					// And which we've actually unlocked...
 					&& m.unlocked
 
-					// And which require 8 or fewer parent berries...
-					&& m.berryReqs.length <= 8
+					// And which don't require too many parent berries...
+					&& m.berryReqs.length <= parentCap
 
 					// And which we haven't already done...
 					&& farming.berryList[m.mutatedBerry]() == 0
