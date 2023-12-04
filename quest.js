@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.5.1
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -823,17 +823,26 @@
 		},
 
 		/**
+		 * Check if the player is able to move to a different region.
+		 *
+		 * @return - Truthy if the player can change region. Falsey if not.
+		 */
+		canChangeRegion() {
+			if (player.highestRegion() == GameConstants.Region.kanto) {
+				return false;
+			}
+
+			return TownList[GameConstants.DockTowns[player.region]].isUnlocked();
+		},
+
+		/**
 		 * Move to the specified region.
 		 *
 		 * @param regionName {string} - Name of the region to move to.
 		 */
 		moveToRegion(regionName) {
-			if (player.highestRegion() == GameConstants.Region.kanto) {
-				throw new Error("Cannot change regions before unlocking Johto");
-			}
-
-			if (!TownList[GameConstants.DockTowns[player.region]].isUnlocked()) {
-				throw new Error("Cannot leave current region before unlocking the dock");
+			if (!this.canChangeRegion()) {
+				throw new Error("Unable to change region");
 			}
 
 			const regionId = GameConstants.Region[regionName];
@@ -1056,7 +1065,14 @@
 		// abstract _moveTo()
 
 		canMoveTo() {
-			return true;
+			const subr = this.getSubregion();
+			const playerSubr = page.getPlayerSubregion();
+			
+			if (page.subregionToRegion(subr) == page.subregionToRegion(playerSubr)) {
+				return true;
+			}
+
+			return page.canChangeRegion();
 		}
 
 		/**
