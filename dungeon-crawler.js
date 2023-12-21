@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Dungeon Crawler
 // @namespace    http://tampermonkey.net/
-// @version      1.9
+// @version      1.9.1
 // @description  Completes dungeons automatically.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -56,15 +56,26 @@
 		},
 
 		/**
+		 * Check if the player can afford the dungeon
+		 * they are currently sitting at.
+		 *
+		 * @return - Truthy if they can afford it, falsey if not.
+		 */
+		canAffordCurrentDungeon() {
+			const dungeon = this._getPlayerDungeon();
+			const cost = new Amount(dungeon.tokenCost, GameConstants.Currency.dungeonToken);
+			return App.game.wallet.hasAmount(cost);
+		},
+
+		/**
 		 * Attempt to enter the currently selected dungeon.
 		 */
 		enterDungeon() {
-			const dungeon = this._getPlayerDungeon();
-			const cost = new Amount(dungeon.tokenCost, GameConstants.Currency.dungeonToken);
-			if (!App.game.wallet.hasAmount(cost)) {
+			if (!this.canAffordCurrentDungeon()) {
 				throw new Error("Can't afford the dungeon");
 			}
 
+			const dungeon = this._getPlayerDungeon();
 			DungeonRunner.initializeDungeon(dungeon);
 		},
 
@@ -676,6 +687,11 @@
 			}
 
 			if (this.stopOnShiny && this.foundNewShiny()) {
+				return true;
+			}
+
+			if (!page.canAffordCurrentDungeon()) {
+				console.warn("Can't afford any more runs of the dungeon");
 				return true;
 			}
 
