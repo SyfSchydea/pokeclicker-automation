@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Digger
 // @namespace    http://tampermonkey.net/
-// @version      1.7.1
+// @version      1.8
 // @description  Automates digging underground in Pokéclicker.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -372,6 +372,80 @@
 		getDiamondNetWorth() {
 			return Underground.getDiamondNetWorth();
 		},
+
+		/**
+		 * Get the number of actual diamonds the player actually owns.
+		 *
+		 * @return {number} - Number of diamonds.
+		 */
+		getDiamonds() {
+			return App.game.wallet.currencies[GameConstants.Currency.diamond]();
+		},
+
+		/**
+		 * Get a list of all underground items.
+		 *
+		 * @return {string[]} - Array of item names.
+		 */
+		getAllItems() {
+			return UndergroundItems.list.map(x => x.name);
+		},
+
+		/**
+		 * Get the diamond value of the given item.
+		 * 0 if the item does not cost diamonds.
+		 *
+		 * @param itemName {string} - Name of the item to query.
+		 * @return         {number} - Diamond value of the item.
+		 */
+		getItemDiamondValue(itemName) {
+			const item = UndergroundItems.getByName(itemName);
+			if (!item) {
+				throw new Error(`Item '${itemName}' not found`);
+			}
+
+			if (item.valueType != UndergroundItemValueType.Diamond) {
+				return 0;
+			}
+
+			return item.value;
+		},
+
+		/**
+		 * Get the number of the given item the player owns.
+		 *
+		 * @param itemName {string} - Named of the item to query.
+		 * @return         {number} - Number of the item owned.
+		 */
+		getItemCount(itemName) {
+			const itemStrId = UndergroundItems.getByName(itemName).itemName;
+			return player.itemList[itemStrId]();
+		},
+
+		/**
+		 * Check if an item has been locked for selling.
+		 *
+		 * @param itemName {string} - Named of the item to query.
+		 * @return                  - Truthy if locked, falsey if not.
+		 */
+		itemIsLocked(itemName) {
+			const item = UndergroundItems.getByName(itemName);
+			return item.sellLocked();
+		},
+
+		/**
+		 * Sell one of the given item.
+		 *
+		 * @param itemName {string} - Named of the item to sell.
+		 */
+		sellItem(itemName) {
+			const item = UndergroundItems.getByName(itemName);
+			if (!item) {
+				throw new Error(`Item '${itemName}' not found`);
+			}
+
+			Underground.sellMineItem(item, 1);
+		},
 	};
 
 	//////////////////////////
@@ -388,6 +462,7 @@
 	const DELAY_BOMB      =      1000;
 	const DELAY_CHISEL    =       200;
 	const DELAY_SURVEY    =      1000;
+	const DELAY_SELL      =      1000;
 	const DELAY_IDLE      = 40 * 1000;
 	const DELAY_NEW_LAYER =  5 * 1000;
 	const DELAY_INIT      =      1000;
@@ -534,6 +609,43 @@
 	}
 
 	/**
+	 * Attempt to sell an item for diamonds.
+	 * Return true if an item was sold.
+	 */
+	function sellItem() {
+		const item = getMostOwnedItem();
+		if (!item) {
+			return false;
+		}
+
+		page.sellItem(item);
+		return true;
+	}
+
+	/**
+	 * Get the diamond value item which the player owns the most of.
+	 */
+	function getMostOwnedItem() {
+		let mostOwnedItem = null;
+		let amount = 0;
+
+		for (const item of page.getAllItems()) {
+			if (page.getItemDiamondValue(item) <= 0
+					|| page.itemIsLocked(item)) {
+				continue;
+			}
+
+			const itemAmt = page.getItemCount(item);
+			if (itemAmt > amount) {
+				mostOwnedItem = item;
+				amount = itemAmt;
+			}
+		}
+
+		return mostOwnedItem;
+	}
+
+	/**
 	 * Task for locating, but not necessarily fully excavating all rewards on the current layer.
 	 */
 	class LocateTask {
@@ -625,7 +737,21 @@
 	 */
 	class NetWorthTask extends LayerTask {
 		hasExpired() {
-			return page.getDiamondNetWorth() >= TARGET_DIAMOND_VALUE;
+			return page.getDiamonds() >= TARGET_DIAMOND_VALUE;
+		}
+
+		action() {
+			const delay = super.action();
+			if (delay != DELAY_IDLE) {
+				return delay;
+			}
+
+			if (page.getDiamonds() < page.getDiamondNetWorth() * 0.5
+					&& sellItem()) {
+				return DELAY_SELL;
+			}
+
+			return DELAY_IDLE;
 		}
 	}
 
@@ -651,7 +777,7 @@
 			if (page.hasUndergroundQuest()) {
 				console.log("Mining for a quest");
 				currentTask = new QuestTask();
-			} else if (page.getDiamondNetWorth() < TARGET_DIAMOND_VALUE) {
+			} else if (page.getDiamonds() < TARGET_DIAMOND_VALUE) {
 				console.log("Mining for diamonds");
 				currentTask = new NetWorthTask();
 			} else {
