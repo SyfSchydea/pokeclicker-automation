@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PokéClicker - Auto-breeder
 // @namespace    http://tampermonkey.net/
-// @version      1.27
+// @version      1.27.1
 // @description  Handles breeding eggs automatically
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -299,12 +299,12 @@
 		 * @return {Object|null} - Fossil object if the player owns one, or null otherwise.
 		 */
 		_getOwnedFossil() {
-			itemLoop: for (const item of player.mineInventory()) {
+			itemLoop: for (const item of Underground.sortedMineInventory()) {
 				if (item.valueType != UndergroundItemValueType.Fossil) {
 					continue;
 				}
 
-				if (item.amount() <= 0) {
+				if (player.itemList[item.itemName]()) {
 					continue;
 				}
 
@@ -379,7 +379,7 @@
 		 * Check if the player has visited the required region to hatch the given fossil.
 
 		 *
-		 * @param fossil {Object}  - Fossil object from player.mineInventory()
+		 * @param fossil {Object}  - Fossil object from Underground.sortedMineInventory()
 		 * @return       {boolean} - True if the player has unlocked the fossil, false otherwise.
 		 */
 		_unlockedFossil(fossil) {
