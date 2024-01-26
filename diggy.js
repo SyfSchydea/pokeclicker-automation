@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Digger
 // @namespace    http://tampermonkey.net/
-// @version      1.8
+// @version      1.8.1
 // @description  Automates digging underground in Pokéclicker.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -463,7 +463,7 @@
 	const DELAY_CHISEL    =       200;
 	const DELAY_SURVEY    =      1000;
 	const DELAY_SELL      =      1000;
-	const DELAY_IDLE      = 40 * 1000;
+	const DELAY_IDLE      = 20 * 1000;
 	const DELAY_NEW_LAYER =  5 * 1000;
 	const DELAY_INIT      =      1000;
 	const DELAY_NO_TASK   = 60 * 1000;
