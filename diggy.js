@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Digger
 // @namespace    http://tampermonkey.net/
-// @version      1.8.1
+// @version      1.8.2
 // @description  Automates digging underground in Pokéclicker.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -469,6 +469,7 @@
 	const DELAY_NO_TASK   = 60 * 1000;
 
 	const TARGET_DIAMOND_VALUE = 3000;
+	const MAX_DIAMOND_VALUE    = TARGET_DIAMOND_VALUE + 1000;
 
 	/**
 	 * Compare two {x, y} position objects.
@@ -737,7 +738,7 @@
 	 */
 	class NetWorthTask extends LayerTask {
 		hasExpired() {
-			return page.getDiamonds() >= TARGET_DIAMOND_VALUE;
+			return page.getDiamonds() >= MAX_DIAMOND_VALUE;
 		}
 
 		action() {
