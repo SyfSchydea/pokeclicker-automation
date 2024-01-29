@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Gym Runner
 // @namespace    http://tampermonkey.net/
-// @version      1.3.1
+// @version      1.4
 // @description  Runs gyms automatically.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -65,6 +65,62 @@
 		},
 
 		/**
+		 * Get a list of gyms at the current location.
+		 * This will usually only a singleton if at a regular gym,
+		 * an empty list if not at any kind of gym,
+		 * or a list with 5 entries if at the elite 4.
+		 *
+		 * @return {string[]} - Array of gym names.
+		 */
+		getCurrentGyms() {
+			return player.town().content
+				.filter(c => c instanceof Gym)
+				.map(g => g.town);
+		},
+
+		/**
+		 * Find the region which a gym belongs to.
+		 *
+		 * @param gym {string} - Gym name.
+		 * @return    {string} - Region name.
+		 */
+		getGymRegion(gym) {
+			return GameConstants.Region[GymList[gym].parent.region];
+		},
+
+		/**
+		 * Get the number of pokemon in the given gym.
+		 *
+		 * @param gym {string} - Gym name.
+		 * @return    {number} - Number of pokemon in the gym.
+		 */
+		getGymPokemonCount(gym) {
+			return GymList[gym].pokemons.length;
+		},
+
+		/**
+		 * Fetch the name of the given pokemon in the given gym.
+		 *
+		 * @param gym {string} - Gym name.
+		 * @param idx {number} - Index of the pokemon to look up.
+		 * @return    {string} - Pokemon name.
+		 */
+		getGymPokemon(gym, idx) {
+			return GymList[gym].pokemons[idx].name;
+		},
+
+		/**
+		 * Fetch the HP of the given pokemon in the given gym.
+		 *
+		 * @param gym {string} - Gym name.
+		 * @param idx {number} - Index of the pokemon to look up.
+		 * @return    {string} - Pokemon name.
+		 */
+		getGymPokemonHP(gym, idx) {
+			return GymList[gym].pokemons[idx].maxHealth;
+		},
+
+		/**
 		 * Start the gym which the player is currently at.
 		 *
 		 * @param n {number|string} - 1-indexed index for the Elite 4
@@ -107,6 +163,40 @@
 			const name = this._getGym(n).town;
 			const gymIdx = GameConstants.getGymIndex(name);
 			return App.game.statistics.gymsDefeated[gymIdx]();
+		},
+
+		/**
+		 * Get the player's current pokemon attack damage.
+		 *
+		 * @return {number} - Attack damage.
+		 */
+		getCurrentDamage() {
+			return App.game.party.pokemonAttackObservable();
+		},
+
+		/**
+		 * Get the damage the player currently deals against
+		 * the given pokemon in the given region.
+		 * May assume clear weather
+		 *
+		 * @param pokemonName {string} - Name of target pokemon.
+		 * @param regionName  {string} - Name of region to assume.
+		 * @return            {number} - Damage dealt by player.
+		 */
+		getDamageAgainst(pokemonName, regionName) {
+			const pkmn = PokemonHelper.getPokemonByName(pokemonName);
+			const region = GameConstants.Region[regionName];
+
+			return App.game.party.calculatePokemonAttack(
+					pkmn.type1,
+					pkmn.type2,
+					false, // don't ignore region multiplier
+					region,
+					false, // Don't include breeding pokemon
+					false, // Don't use base attack
+					WeatherType.Clear,
+					false // Don't ignore level
+				);
 		},
 	};
 
@@ -200,6 +290,51 @@
 		return clearCount;
 	}
 
+	function timeToKillPokemon(gym, idx, damageMultiplier=1) {
+		const pokemon = page.getGymPokemon(gym, idx);
+		const region = page.getGymRegion(gym);
+		const damage = Math.round(page.getDamageAgainst(pokemon, region)
+				* damageMultiplier);
+
+		return Math.ceil(page.getGymPokemonHP(gym, idx) / damage);
+	}
+
+	function timeToKillGym(gym, damageMultiplier=1) {
+		const pkmnCount = page.getGymPokemonCount(gym);
+
+		let ttk = 0;
+		for (let i = 0; i < pkmnCount; ++i) {
+			ttk += timeToKillPokemon(gym, i, damageMultiplier);
+		}
+
+		return ttk;
+	}
+
+	function estimateRequiredGymDmg(gym) {
+		const REQUIRED_TTK = 30;
+
+		let min = 0;
+		let max = 1;
+
+		// Increase max
+		while (timeToKillGym(gym, max) > REQUIRED_TTK) {
+			max *= 2;
+		}
+
+		// Hone in on exact value
+		while (max - min > 0.00001) {
+			const mid = (max + min) / 2;
+
+			if (timeToKillGym(gym, mid) <= REQUIRED_TTK) {
+				max = mid;
+			} else {
+				min = mid;
+			}
+		}
+
+		return Math.ceil(max * page.getCurrentDamage());
+	}
+
 	function cmdRun(clearCount=100) {
 		clearCount = validateClearCount(clearCount);
 
@@ -248,10 +383,25 @@
 		return currentTask != null;
 	}
 
+	/**
+	 * Show the estimated damage required to beat the current gym.
+	 */
+	function cmdEstDmg() {
+		const gyms = page.getCurrentGyms();
+		if (gyms.length <= 0) {
+			throw new Error("There are no gyms here");
+		}
+
+		console.log(gyms
+			.map(g => g + " requires " + estimateRequiredGymDmg(g))
+			.join("\n"));
+	}
+
 	(function main() {
 		window[WINDOW_KEY] = {
-			run:   cmdRun,
-			elite: cmdElite,
+			run:             cmdRun,
+			elite:           cmdElite,
+			estimatedDamage: cmdEstDmg,
 		};
 
 		if (!window.syfScripts) {
