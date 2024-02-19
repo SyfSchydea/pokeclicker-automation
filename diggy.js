@@ -468,7 +468,7 @@
 	const DELAY_INIT      =      1000;
 	const DELAY_NO_TASK   = 60 * 1000;
 
-	const TARGET_DIAMOND_VALUE = 3000;
+	const TARGET_DIAMOND_VALUE = 5000;
 	const MAX_DIAMOND_VALUE    = TARGET_DIAMOND_VALUE + 1000;
 
 	/**
