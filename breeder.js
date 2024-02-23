@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PokéClicker - Auto-breeder
 // @namespace    http://tampermonkey.net/
-// @version      1.27.2
+// @version      1.27.3
 // @description  Handles breeding eggs automatically
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -518,11 +518,11 @@
 		 *
 		 * @param dexId {number} - Pokedex if of the species to look up.
 		 * @return               - Truthy if the pokemon is contagious,
-		 *                         falsey if not.
+		 *                         falsey if not, or if the pokemon hasn't been caught.
 		 */
 		pokemonIsContagious(dexId) {
 			const pkmn = App.game.party.getPokemon(dexId);
-			return pkmn.pokerus >= GameConstants.Pokerus.Contagious;
+			return pkmn && pkmn.pokerus >= GameConstants.Pokerus.Contagious;
 		},
 
 		/**
@@ -530,11 +530,11 @@
 		 *
 		 * @param dexId {number} - Pokedex if of the species to look up.
 		 * @return               - Truthy if the pokemon can catch pokerus,
-		 *                         falsey if not.
+		 *                         falsey if not, or if the pokemon hasn't been caught.
 		 */
 		pokemonIsUninfected(dexId) {
 			const pkmn = App.game.party.getPokemon(dexId);
-			return pkmn.pokerus <= GameConstants.Pokerus.Uninfected;
+			return pkmn && pkmn.pokerus <= GameConstants.Pokerus.Uninfected;
 		},
 
 		/**
