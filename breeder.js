@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PokéClicker - Auto-breeder
 // @namespace    http://tampermonkey.net/
-// @version      1.27.1
+// @version      1.27.2
 // @description  Handles breeding eggs automatically
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -304,7 +304,8 @@
 					continue;
 				}
 
-				if (player.itemList[item.itemName]()) {
+				// Check we actually own this item
+				if (player.itemList[item.itemName]() <= 0) {
 					continue;
 				}
 
@@ -403,7 +404,7 @@
 				return false;
 			}
 
-			Underground.sellMineItem(fossil.id);
+			Underground.sellMineItem(fossil);
 			return true;
 		},
 
