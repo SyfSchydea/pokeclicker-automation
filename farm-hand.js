@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.46.2
+// @version      1.47
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -2910,7 +2910,8 @@
 			throw new Error("Minutes should be non-negative");
 		}
 
-		let maxLength = MAX_TASK_LENGTH + page.getHighestRegion() * TASK_LENGTH_REGION_BONUS;
+		const baseCap = Math.max(MAX_TASK_LENGTH, page.getBerryDeathAge(targetBerry) / 60)
+		const maxLength = baseCap * (page.getHighestRegion() + 1);
 
 		if (minutes > maxLength) {
 			minutes = maxLength;
@@ -2962,7 +2963,9 @@
 		validateParentBerries(berries);
 		berry = berries[0];
 
-		const maxLength = MAX_TASK_LENGTH + page.getHighestRegion() * TASK_LENGTH_REGION_BONUS;
+		const baseCap = Math.max(MAX_TASK_LENGTH, page.getBerryDeathAge(berry) / 60)
+		const maxLength = baseCap * (page.getHighestRegion() + 1);
+
 		if (minutes > maxLength) {
 			minutes = maxLength;
 		}
