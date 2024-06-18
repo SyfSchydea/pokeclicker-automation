@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Dungeon Crawler
 // @namespace    http://tampermonkey.net/
-// @version      1.9.2
+// @version      1.9.3
 // @description  Completes dungeons automatically.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -101,11 +101,11 @@
 		 */
 		activateTile() {
 			switch (DungeonRunner.currentTileType()()) {
-				case GameConstants.DungeonTile.chest:
+				case GameConstants.DungeonTileType.chest:
 					DungeonRunner.openChest();
 					break;
 
-				case GameConstants.DungeonTile.boss:
+				case GameConstants.DungeonTileType.boss:
 					DungeonRunner.startBossFight();
 					break;
 			}
@@ -168,7 +168,7 @@
 		 */
 		tileIsBoss(x, y) {
 			const tile = this._getTile(x, y);
-			return tile.isVisible && tile.type() == GameConstants.DungeonTile.boss;
+			return tile.isVisible && tile.type() == GameConstants.DungeonTileType.boss;
 		},
 
 		/**
@@ -180,7 +180,7 @@
 		 */
 		tileIsEnemy(x, y) {
 			const tile = this._getTile(x, y);
-			return tile.isVisible && tile.type() == GameConstants.DungeonTile.enemy;
+			return tile.isVisible && tile.type() == GameConstants.DungeonTileType.enemy;
 		},
 
 		/**
@@ -192,7 +192,7 @@
 		 */
 		tileIsChest(x, y) {
 			const tile = this._getTile(x, y);
-			return tile.isVisible && tile.type() == GameConstants.DungeonTile.chest;
+			return tile.isVisible && tile.type() == GameConstants.DungeonTileType.chest;
 		},
 
 		/**
@@ -256,7 +256,7 @@
 			for (const row of DungeonRunner.map.board()[this._getFloorId()]) {
 				for (const tile of row) {
 					if (!tile.isVisible
-							&& tile.type() == GameConstants.DungeonTile.chest) {
+							&& tile.type() == GameConstants.DungeonTileType.chest) {
 						return true;
 					}
 				}
