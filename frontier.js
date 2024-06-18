@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Syf Scripts - Battle Frontier
 // @namespace    http://tampermonkey.net/
-// @version      1.0.1
+// @version      1.0.2
 // @description  Completes the Battle Frontier automatically.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -30,7 +30,7 @@
 		 * @return - Truthy if at the Battle Frontier town. Falsey if not.
 		 */
 		atFrontierTown() {
-			return player.town().name == "Battle Frontier";
+			return player.town.name == "Battle Frontier";
 		},
 
 		/**

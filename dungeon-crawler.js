@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Dungeon Crawler
 // @namespace    http://tampermonkey.net/
-// @version      1.9.1
+// @version      1.9.2
 // @description  Completes dungeons automatically.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -42,7 +42,7 @@
 		 * @return {Dungeon} - Dungeon object.
 		 */
 		_getPlayerDungeon() {
-			const town = player.town();
+			const town = player.town;
 			if (!(town instanceof DungeonTown)) {
 				throw new Error("Not at a dungeon");
 			}

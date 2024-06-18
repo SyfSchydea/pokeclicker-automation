@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Login
 // @namespace    http://tampermonkey.net/
-// @version      1.7.2
+// @version      1.7.3
 // @description  Automatically re-logs in, if you refresh
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -127,7 +127,7 @@
 		 * @return              - Truthy if the pokemon can be bought here, falsey if not.
 		 */
 		findPokemonInShop(name) {
-			for (const townContent of player.town().content) {
+			for (const townContent of player.town.content) {
 				if (!(townContent instanceof Shop)) {
 					continue;
 				}

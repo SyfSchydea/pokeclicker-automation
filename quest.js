@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Auto Quester
 // @namespace    http://tampermonkey.net/
-// @version      1.5.3
+// @version      1.5.4
 // @description  Completes quests automatically.
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -591,7 +591,7 @@
 		 * @return {string} - Name of the route.
 		 */
 		getCurrentRoute() {
-			const route = Routes.getRoute(player.region, player.route());
+			const route = Routes.getRoute(player.region, player.route);
 			return route.routeName;
 		},
 
@@ -601,7 +601,7 @@
 		 * @return {string} - Name of the town.
 		 */
 		getCurrentTown() {
-			return player.town().name;
+			return player.town.name;
 		},
 
 		/**

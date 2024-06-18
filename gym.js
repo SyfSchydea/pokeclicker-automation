@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Gym Runner
 // @namespace    http://tampermonkey.net/
-// @version      1.4
+// @version      1.4.1
 // @description  Runs gyms automatically.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -36,7 +36,7 @@
 		 * @return  {Gym}           - Gym object.
 		 */
 		_getGym(n=0) {
-			const gyms = player.town().content.filter(c => c instanceof Gym);
+			const gyms = player.town.content.filter(c => c instanceof Gym);
 
 			switch (typeof n) {
 				case "number": {
@@ -73,7 +73,7 @@
 		 * @return {string[]} - Array of gym names.
 		 */
 		getCurrentGyms() {
-			return player.town().content
+			return player.town.content
 				.filter(c => c instanceof Gym)
 				.map(g => g.town);
 		},
