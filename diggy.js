@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokéclicker - Auto Digger
 // @namespace    http://tampermonkey.net/
-// @version      1.8.2
+// @version      1.8.3
 // @description  Automates digging underground in Pokéclicker.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -517,7 +517,23 @@
 		throw new Error("Failed to find chisel tile");
 	}
 
+	// Check that at least one tile has been fully revealed
+	function hasTilesRevealed() {
+		const gridSize = page.getMineGridSize();
+
+		for (let y = 0; y < gridSize.y; y++) {
+			for (let x = 0; x < gridSize.x; x++) {
+				if (page.tileRevealed({x, y})) {
+					return true;
+				}
+			}
+		}
+
+		return false;
+	}
+
 	// Find a spot to use the chisel while searching for unfound items.
+	// This assumes that at least one tile has already been excavated
 	function findChiselSpotSearch() {
 		// Go through list of all tiles to find all fully excavated tiles.
 		const gridSize = page.getMineGridSize();
@@ -715,9 +731,14 @@
 				return DELAY_SURVEY;
 			}
 
-			if (page.canAffordChisel()) {
+			if (hasTilesRevealed() && page.canAffordChisel()) {
 				page.useChisel(findChiselSpotSearch());
 				return DELAY_CHISEL;
+			}
+
+			if (page.canAffordBomb()) {
+				page.useBomb();
+				return DELAY_BOMB;
 			}
 
 			return DELAY_IDLE;
