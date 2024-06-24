@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poké-clicker - Better farm hands
 // @namespace    http://tampermonkey.net/
-// @version      1.47
+// @version      1.48
 // @description  Works your farm for you.
 // @author       SyfP
 // @match        https://www.pokeclicker.com/
@@ -1093,6 +1093,32 @@
 		 */
 		getSaveKey() {
 			return Save.key;
+		},
+
+		/**
+		 * Check if the given plot has a wandering pokemon.
+		 *
+		 * @param plotIdx {number} - Index of the plot to check.
+		 * @return                 - Truthy if there is a wanderer, falsey if not.
+		 */
+		plotHasWanderer(plotIdx) {
+			const wanderer = this._getPlot(plotIdx).wanderer;
+			if (!wanderer) {
+				return false;
+			}
+
+			return true;
+		},
+
+		/**
+		 * Catch the wanderer in the given plot.
+		 *
+		 * @param plotIdx {number} - Index of the plot to check.
+		 */
+		catchWanderer(plotIdx) {
+			const farming = this._getFarmingModule()
+			const plot = this._getPlot(plotIdx, farming);
+			farming.handleWanderer(plot);
 		},
 	};
 
@@ -2844,6 +2870,15 @@
 		}
 	}
 
+	function catchWanderers() {
+		for (let i = 0; i < PAGE_PLOT_COUNT; ++i) {
+			if (page.plotHasWanderer(i)) {
+				page.catchWanderer(i);
+				return;
+			}
+		}
+	}
+
 	function tick() {
 		if (!page.canAccess()) {
 			return scheduleTick(DELAY_IDLE);
@@ -2864,6 +2899,11 @@
 		if (delay == null) {
 			delay = DELAY_IDLE;
 		}
+
+		if (delay == DELAY_IDLE) {
+			catchWanderers();
+		}
+
 		scheduleTick(delay);
 	}
 
