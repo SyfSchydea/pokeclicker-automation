@@ -14,6 +14,7 @@ SCRIPT_SOURCE_FILES = [
 	"auto-login.js",
 	"quest.js",
 	"frontier.js",
+	"sleep-earnings.js",
 ]
 
 # relative to game's home directory
