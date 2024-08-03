@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Offline Earnings on Sleep
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.0.1
 // @description  Award offline earnings on significant time skips (eg. PC sleep)
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -61,14 +61,27 @@
 
 	let lastEarningsTrigger = 0;
 
+	function timeDeltaStr(ms) {
+		if (ms < 100) {
+			return `${ms}ms`;
+		}
+
+		const seconds = ms / 1000;
+		if (seconds < 60) {
+			return `${seconds.toPrecision(2)} seconds`;
+		}
+
+		return `${seconds.toFixed(0)} seconds`;
+	}
+
 	function tick() {
-		const now = new Date();
-		const lastSave = page.getLastSaveTime();
+		const now = +new Date();
+		const lastSave = +page.getLastSaveTime();
 
 		if (now >= lastSave + MIN_TIME_SKIP
 				&& now >= lastEarningsTrigger + EARNINGS_COOLDOWN) {
 			page.triggerOfflineEarnings();
-			console.log("Awarding offline earnings for " + (lastSave - now) + "ms time skip");
+			console.log("Awarding offline earnings for " + timeDeltaStr(now - lastSave) + " time skip");
 			lastEarningsTrigger = now;
 		}
 	}
