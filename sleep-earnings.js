@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Offline Earnings on Sleep
 // @namespace    http://tampermonkey.net/
-// @version      1.0.1
+// @version      1.1
 // @description  Award offline earnings on significant time skips (eg. PC sleep)
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -39,6 +39,32 @@
 		triggerOfflineEarnings() {
 			App.game.computeOfflineEarnings();
 		},
+
+		/**
+		 * Check if the player has unlocked dream orbs.
+		 *
+		 * @return - Truthy if dream orbs are unlocked, falsey otherwise.
+		 */
+		unlockedDreamOrbs() {
+			return (new DreamOrbTownContent()).isUnlocked();
+		},
+
+		/**
+		 * Get a list of dream orbs owned by the player.
+		 *
+		 * @return {Object[]} - List of objects for each Dream Orb owned.
+		 *                      Each object should contain the values:
+		 *                      - "name":   String - the name of the orb type/colour.
+		 *                      - "amount": number - The amount the player owns.
+		 */
+		getDreamOrbs() {
+			return App.game.dreamOrbController.orbs
+				.map(o => ({
+					name: o.color,
+					amount: o.amount(),
+				}))
+				.filter(o => o.amount > 0);
+		},
 	};
 
 	//////////////////////////
@@ -74,6 +100,19 @@
 		return `${seconds.toFixed(0)} seconds`;
 	}
 
+	function printDreamOrbs() {
+		if (!page.unlockedDreamOrbs()) {
+			return;
+		}
+
+		const orbs = page.getDreamOrbs();
+		console.log("You have",
+			orbs.map(o =>
+					`${o.amount} ${o.name} `
+					+ (o.amount == 1? "orb" : "orbs"))
+				.join(", "));
+	}
+
 	function tick() {
 		const now = +new Date();
 		const lastSave = +page.getLastSaveTime();
@@ -82,6 +121,7 @@
 				&& now >= lastEarningsTrigger + EARNINGS_COOLDOWN) {
 			page.triggerOfflineEarnings();
 			console.log("Awarding offline earnings for " + timeDeltaStr(now - lastSave) + " time skip");
+			printDreamOrbs();
 			lastEarningsTrigger = now;
 		}
 	}
