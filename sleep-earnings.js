@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokeclicker - Offline Earnings on Sleep
 // @namespace    http://tampermonkey.net/
-// @version      1.1.1
+// @version      1.1.2
 // @description  Award offline earnings on significant time skips (eg. PC sleep)
 // @author       SyfP
 // @match        https://www.tampermonkey.net
@@ -103,7 +103,13 @@
 			return `${fullMinutes} minutes, ${seconds.toFixed(0)} seconds`
 		}
 
-		return `${fullMinutes.toFixed(0)} minutes`;
+		const fullHours = Math.floor(fullMinutes / 60);
+		const minutes = fullMinutes - fullHours * 60;
+		if (fullHours < 24) {
+			return `${fullHours} hours, ${minutes.toFixed(0)} minutes`
+		}
+
+		return `${fullHours.toFixed(0)} hours`;
 	}
 
 	function printDreamOrbs() {
